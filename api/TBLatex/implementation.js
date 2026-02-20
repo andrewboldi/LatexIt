@@ -238,6 +238,15 @@ function checkPreviewPackage(latexExpression) {
   return pattern.test(latexExpression);
 }
 
+function isSnapEnvironment() {
+  try {
+    const env = Cc["@mozilla.org/process/environment;1"].getService(Ci.nsIEnvironment);
+    return env.exists("SNAP") || env.exists("SNAP_NAME") || env.exists("SNAP_INSTANCE_NAME");
+  } catch (error) {
+    return false;
+  }
+}
+
 var TBLatex = class extends ExtensionCommon.ExtensionAPI {
   getAPI(context) {
     return {
@@ -271,22 +280,28 @@ var TBLatex = class extends ExtensionCommon.ExtensionAPI {
             }
 
             if (!fileExists(latexPath)) {
+              const snapHint = isSnapEnvironment()
+                ? " (Thunderbird Snap build cannot access host /usr/bin TeX binaries)"
+                : "";
               return {
                 status: 2,
                 depth: 0,
                 dataUrl: "",
                 log:
-                  `!!! Wrong path for 'latex' executable: "${latexPath || "(empty)"}". Set it in LaTeX It! options.\n`,
+                  `!!! Wrong path for 'latex' executable: "${latexPath || "(empty)"}". Set it in LaTeX It! options${snapHint}.\n`,
               };
             }
 
             if (!fileExists(dvipngPath)) {
+              const snapHint = isSnapEnvironment()
+                ? " (Thunderbird Snap build cannot access host /usr/bin TeX binaries)"
+                : "";
               return {
                 status: 2,
                 depth: 0,
                 dataUrl: "",
                 log:
-                  `!!! Wrong path for 'dvipng' executable: "${dvipngPath || "(empty)"}". Set it in LaTeX It! options.\n`,
+                  `!!! Wrong path for 'dvipng' executable: "${dvipngPath || "(empty)"}". Set it in LaTeX It! options${snapHint}.\n`,
               };
             }
 

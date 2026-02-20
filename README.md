@@ -27,6 +27,9 @@ Requirements
 - A local TeX setup with:
   - `latex`
   - `dvipng`
+- Important: the Thunderbird **Snap** package is sandboxed and cannot execute
+  host TeX binaries from `/usr/bin`. Use a non-snap Thunderbird build
+  (deb/tarball/manual install) for this add-on.
 
 Build
 -----
