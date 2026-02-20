@@ -1,17 +1,11 @@
+ADDON_ID ?=
+OUT ?= tblatex.xpi
+
 all: dist
 
 .PHONY: dist clean
 dist:
-	rm -f tblatex.xpi
-	zip -r tblatex.xpi \
-		manifest.json \
-		icon.png \
-		background.js \
-		api \
-		compose \
-		ui \
-		README.md \
-		Changelog
+	./scripts/build_xpi.sh "$(OUT)" "$(ADDON_ID)"
 
 clean:
 	rm -f tblatex.xpi

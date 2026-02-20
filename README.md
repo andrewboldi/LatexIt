@@ -58,6 +58,18 @@ make
 6. If Thunderbird is sandboxed, enable helper fallback in options and make sure
    helper URL matches your helper service.
 
+Publishing a fork on ATN
+------------------------
+
+If you are publishing your own fork (not updating the original add-on listing),
+build with a unique add-on ID:
+
+```sh
+make ADDON_ID='tblatex@your-domain-or-handle.example' OUT='tblatex-fork.xpi'
+```
+
+Upload `tblatex-fork.xpi` to ATN. This avoids "Duplicate add-on ID found."
+
 Development install (temporary)
 -------------------------------
 
