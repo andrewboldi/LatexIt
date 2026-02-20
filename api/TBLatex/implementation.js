@@ -2,7 +2,7 @@
 
 const Cc = Components.classes;
 const Ci = Components.interfaces;
-const RENDER_SCALE = 2;
+const DEFAULT_RENDER_SCALE = 4;
 
 function normalizeExecutablePath(path) {
   if (!path || typeof path !== "string") {
@@ -184,6 +184,14 @@ function parseFontPx(fontPx, fallbackPx) {
   return fallbackPx;
 }
 
+function normalizeRenderScale(value) {
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isFinite(parsed)) {
+    return DEFAULT_RENDER_SCALE;
+  }
+  return Math.min(8, Math.max(1, parsed));
+}
+
 function makeTempFiles() {
   const tempDir = Services.dirsvc.get("TmpD", Ci.nsIFile);
   let suffix = `${Date.now()}-${Math.floor(Math.random() * 1000000)}`;
@@ -290,6 +298,7 @@ function readLegacyPrefs() {
     ["dvipngPath", "tblatex.dvipng_path", "string", ""],
     ["autodpi", "tblatex.autodpi", "bool", true],
     ["fontPx", "tblatex.font_px", "int", 16],
+    ["renderScale", "tblatex.render_scale", "int", DEFAULT_RENDER_SCALE],
     ["log", "tblatex.log", "bool", false],
     ["debug", "tblatex.debug", "bool", false],
     ["keepTempFiles", "tblatex.keeptempfiles", "bool", false],
@@ -358,6 +367,7 @@ var TBLatex = class extends ExtensionCommon.ExtensionAPI {
           dvipngPath,
           autodpi,
           defaultFontPx,
+          renderScale,
           debug,
           keepTempFiles
         ) {
@@ -437,12 +447,13 @@ var TBLatex = class extends ExtensionCommon.ExtensionAPI {
             const sizePx = autodpi
               ? parseFontPx(fontPx, defaultFontPx)
               : defaultFontPx;
+            const normalizedRenderScale = normalizeRenderScale(renderScale);
             const baseDpi = (sizePx * 72.27) / 10;
-            const dpi = baseDpi * RENDER_SCALE;
+            const dpi = baseDpi * normalizedRenderScale;
             const safeColor = fontColor && fontColor.trim() ? fontColor : "RGB 0 0 0";
 
             if (debug) {
-              log += `*** Using dpi=${dpi} (base=${baseDpi}, scale=${RENDER_SCALE}x) and color=${safeColor}\n`;
+              log += `*** Using dpi=${dpi} (base=${baseDpi}, scale=${normalizedRenderScale}x) and color=${safeColor}\n`;
             }
 
             const dvipngArgs = [
@@ -491,7 +502,7 @@ var TBLatex = class extends ExtensionCommon.ExtensionAPI {
               status,
               depth: 0,
               dataUrl,
-              renderScale: RENDER_SCALE,
+              renderScale: normalizedRenderScale,
               log,
             };
           } catch (error) {

@@ -2,6 +2,7 @@ pref("tblatex.latex_path", "");
 pref("tblatex.dvipng_path", "");
 pref("tblatex.autodpi", true);
 pref("tblatex.font_px", 16);
+pref("tblatex.render_scale", 4);
 pref("tblatex.log", false);
 pref("tblatex.debug", false);
 pref("tblatex.keeptempfiles", false);

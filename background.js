@@ -7,6 +7,7 @@ const DEFAULT_PREFS = {
   helperUrl: "http://127.0.0.1:3737",
   autodpi: true,
   fontPx: 16,
+  renderScale: 4,
   log: false,
   debug: false,
   keepTempFiles: false,
@@ -68,12 +69,21 @@ function normalizeHelperUrl(value) {
   return withScheme.replace(/\/+$/, "");
 }
 
+function normalizeRenderScale(value) {
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isFinite(parsed)) {
+    return DEFAULT_PREFS.renderScale;
+  }
+  return Math.min(8, Math.max(1, parsed));
+}
+
 async function getPrefs() {
   const { prefs = {} } = await browser.storage.local.get("prefs");
   const merged = { ...DEFAULT_PREFS, ...prefs };
   merged.latexPath = normalizeExecutablePath(merged.latexPath);
   merged.dvipngPath = normalizeExecutablePath(merged.dvipngPath);
   merged.helperUrl = normalizeHelperUrl(merged.helperUrl);
+  merged.renderScale = normalizeRenderScale(merged.renderScale);
   merged.helperFallbackEnabled = Boolean(merged.helperFallbackEnabled);
   return merged;
 }
@@ -88,6 +98,9 @@ async function setPrefs(partialPrefs) {
   }
   if (Object.prototype.hasOwnProperty.call(sanitized, "helperUrl")) {
     sanitized.helperUrl = normalizeHelperUrl(sanitized.helperUrl);
+  }
+  if (Object.prototype.hasOwnProperty.call(sanitized, "renderScale")) {
+    sanitized.renderScale = normalizeRenderScale(sanitized.renderScale);
   }
   if (Object.prototype.hasOwnProperty.call(sanitized, "helperFallbackEnabled")) {
     sanitized.helperFallbackEnabled = Boolean(sanitized.helperFallbackEnabled);
@@ -245,6 +258,7 @@ async function renderViaHelper(message, prefs, autodpi, fontPx) {
         dvipngPath: prefs.dvipngPath,
         autodpi,
         defaultFontPx: fontPx,
+        renderScale: prefs.renderScale,
         debug: prefs.debug,
         keepTempFiles: prefs.keepTempFiles,
       }),
@@ -283,6 +297,7 @@ async function renderLatexMessage(message) {
       prefs.dvipngPath,
       autodpi,
       fontPx,
+      prefs.renderScale,
       prefs.debug,
       prefs.keepTempFiles
     );

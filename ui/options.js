@@ -7,11 +7,17 @@ const FIELDS = [
   "helperUrl",
   "autodpi",
   "fontPx",
+  "renderScale",
   "log",
   "debug",
   "keepTempFiles",
   "template",
 ];
+
+const NUMBER_DEFAULTS = Object.freeze({
+  fontPx: 16,
+  renderScale: 4,
+});
 
 function setStatus(message) {
   document.getElementById("status").textContent = message;
@@ -45,7 +51,12 @@ function readPrefsFromForm() {
       prefs[name] = element.checked;
     } else if (element.type === "number") {
       const parsed = Number(element.value);
-      prefs[name] = Number.isFinite(parsed) && parsed > 0 ? Math.round(parsed) : 16;
+      const fallback = NUMBER_DEFAULTS[name] ?? 1;
+      let value = Number.isFinite(parsed) && parsed > 0 ? Math.round(parsed) : fallback;
+      if (name === "renderScale") {
+        value = Math.min(8, Math.max(1, value));
+      }
+      prefs[name] = value;
     } else {
       prefs[name] = element.value ?? "";
     }

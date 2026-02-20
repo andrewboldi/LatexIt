@@ -24,7 +24,7 @@ PREVIEW_PACKAGE_RE = re.compile(
     re.MULTILINE,
 )
 FONT_NUMBER_RE = re.compile(r"[-+]?\d*\.?\d+")
-RENDER_SCALE = 2.0
+DEFAULT_RENDER_SCALE = 4.0
 
 
 def normalize_path(value: Any) -> str:
@@ -61,6 +61,14 @@ def parse_font_px(value: Any, fallback: int) -> float:
     except (TypeError, ValueError):
         pass
     return float(fallback)
+
+
+def parse_render_scale(value: Any, fallback: float = DEFAULT_RENDER_SCALE) -> float:
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        parsed = int(fallback)
+    return float(min(8, max(1, parsed)))
 
 
 def run_command(args: list[str]) -> subprocess.CompletedProcess[str]:
@@ -133,8 +141,9 @@ def render(payload: dict[str, Any]) -> dict[str, Any]:
         if autodpi
         else float(default_font_px)
     )
+    render_scale = parse_render_scale(payload.get("renderScale", DEFAULT_RENDER_SCALE))
     base_dpi = font_px_value * 72.27 / 10.0
-    dpi = base_dpi * RENDER_SCALE
+    dpi = base_dpi * render_scale
     font_color = str(payload.get("fontColor", "")).strip() or "RGB 0 0 0"
 
     status = 0
@@ -212,7 +221,7 @@ def render(payload: dict[str, Any]) -> dict[str, Any]:
             log_lines.append(f"*** helper latex path: {latex_path}")
             log_lines.append(f"*** helper dvipng path: {dvipng_path}")
             log_lines.append(
-                f"*** helper dpi: {dpi} (base={base_dpi}, scale={RENDER_SCALE}x)"
+                f"*** helper dpi: {dpi} (base={base_dpi}, scale={render_scale}x)"
             )
             log_lines.append(f"*** helper font color: {font_color}")
 
@@ -220,7 +229,7 @@ def render(payload: dict[str, Any]) -> dict[str, Any]:
             "status": status,
             "depth": 0,
             "dataUrl": f"data:image/png;base64,{encoded}",
-            "renderScale": RENDER_SCALE,
+            "renderScale": render_scale,
             "log": ("\n".join(log_lines) + "\n") if log_lines else "",
         }
     finally:

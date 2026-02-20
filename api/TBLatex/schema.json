@@ -36,6 +36,10 @@
             "type": "integer"
           },
           {
+            "name": "renderScale",
+            "type": "integer"
+          },
+          {
             "name": "debug",
             "type": "boolean"
           },
