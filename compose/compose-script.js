@@ -444,6 +444,11 @@ browser.runtime.onMessage.addListener((message) => {
       return Promise.resolve(getSelectionText());
     case "hasLogReport":
       return Promise.resolve(Boolean(document.getElementById(LOG_PANEL_ID)));
+    case "removeLogReport": {
+      const hadReport = Boolean(document.getElementById(LOG_PANEL_ID));
+      removeLogPanel();
+      return Promise.resolve({ ok: true, removed: hadReport });
+    }
     default:
       return null;
   }

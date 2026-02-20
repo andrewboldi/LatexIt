@@ -355,6 +355,24 @@ async function sendComposeCommand(tabId, payload) {
   return browser.tabs.sendMessage(tabId, payload);
 }
 
+async function removeComposeRunReport(tabId) {
+  if (!tabId) {
+    return { ok: false, removed: false };
+  }
+
+  try {
+    const result = await sendComposeCommand(tabId, { command: "removeLogReport" });
+    return {
+      ok: true,
+      removed: Boolean(result && result.removed),
+    };
+  } catch (error) {
+    // Don't block sending if the compose script is unavailable for this tab.
+    console.warn("Could not remove run report before send:", error);
+    return { ok: false, removed: false };
+  }
+}
+
 async function runLatexify(tabId, silent) {
   if (latexifyInFlightByTab.get(tabId)) {
     return { ok: false, skipped: true, reason: "in-flight" };
@@ -546,6 +564,17 @@ browser.commands.onCommand.addListener(async (command) => {
     await runLatexify(tab.id, true);
   });
 });
+
+if (browser.compose && browser.compose.onBeforeSend) {
+  browser.compose.onBeforeSend.addListener(async (tab, _details) => {
+    if (!tab || !tab.id) {
+      return {};
+    }
+
+    await removeComposeRunReport(tab.id);
+    return {};
+  });
+}
 
 browser.runtime.onMessage.addListener((message, sender) => handleRuntimeMessage(message, sender));
 
