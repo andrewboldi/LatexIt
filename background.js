@@ -7,7 +7,7 @@ const DEFAULT_PREFS = {
   helperUrl: "http://127.0.0.1:3737",
   autodpi: true,
   fontPx: 16,
-  log: true,
+  log: false,
   debug: false,
   keepTempFiles: false,
   template:
