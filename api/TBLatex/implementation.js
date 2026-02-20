@@ -70,15 +70,13 @@ function readBinaryAsBase64(file) {
   );
   inputStream.init(file, 0x01, 0o444, 0);
 
-  const binaryStream = Cc["@mozilla.org/binaryinputstream;1"].createInstance(
-    Ci.nsIBinaryInputStream
+  const encoder = Cc["@mozilla.org/scriptablebase64encoder;1"].createInstance(
+    Ci.nsIScriptableBase64Encoder
   );
-  binaryStream.setInputStream(inputStream);
-  const bytes = binaryStream.readBytes(binaryStream.available());
-  binaryStream.close();
+  const output = encoder.encodeToString(inputStream, inputStream.available());
   inputStream.close();
 
-  return btoa(bytes);
+  return output;
 }
 
 function removeFile(file) {
