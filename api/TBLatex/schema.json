@@ -1,0 +1,62 @@
+[
+  {
+    "namespace": "TBLatex",
+    "functions": [
+      {
+        "name": "render",
+        "type": "function",
+        "async": true,
+        "parameters": [
+          {
+            "name": "latexExpression",
+            "type": "string"
+          },
+          {
+            "name": "fontPx",
+            "type": "string"
+          },
+          {
+            "name": "fontColor",
+            "type": "string"
+          },
+          {
+            "name": "latexPath",
+            "type": "string"
+          },
+          {
+            "name": "dvipngPath",
+            "type": "string"
+          },
+          {
+            "name": "autodpi",
+            "type": "boolean"
+          },
+          {
+            "name": "defaultFontPx",
+            "type": "integer"
+          },
+          {
+            "name": "debug",
+            "type": "boolean"
+          },
+          {
+            "name": "keepTempFiles",
+            "type": "boolean"
+          }
+        ]
+      },
+      {
+        "name": "detectExecutables",
+        "type": "function",
+        "async": true,
+        "parameters": []
+      },
+      {
+        "name": "readLegacyPrefs",
+        "type": "function",
+        "async": true,
+        "parameters": []
+      }
+    ]
+  }
+]

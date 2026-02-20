@@ -4,17 +4,69 @@ Latex It!
 Description
 -----------
 
-This extension allows you to run LaTeX on your computer to automatically
-generate images for all expression $expr$ found while composing your email. You
-can also render possibly more complex sets of LaTeX, and have them inserted as
-images. You can undo the LaTeX run if the formulae you inserted were wrongly
-typeset, and you can customize the appearance of your formulae.
+This extension runs local `latex` and `dvipng` binaries to convert `$...$` and
+`$$...$$` expressions into inline images while composing HTML emails in
+Thunderbird.
 
-Since everything is run on your own computer, you're in control!
+The add-on now uses the MailExtension + Experiment API model and targets
+Thunderbird **140+**.
 
-Usage
+Features
+--------
+
+- Run LaTeX conversion on all matching expressions in a compose window
+- Undo / undo all inserted images
+- Insert complex LaTeX at cursor position
+- Configure executable paths, template, DPI behavior, and debug/log options
+- Auto-detect `latex` and `dvipng` in your PATH
+
+Requirements
+------------
+
+- Thunderbird 140 or newer
+- A local TeX setup with:
+  - `latex`
+  - `dvipng`
+
+Build
 -----
 
-This extension is provided as a set of files. Please run make to build a working
-xpi. Alternatively, you can create a file named "tblatex@xulforum.org" in your
-extensions/ directory with a single line containing the path to this folder.
+Run:
+
+```sh
+make
+```
+
+This produces `tblatex.xpi`.
+
+Install
+-------
+
+1. Build the extension:
+
+```sh
+make
+```
+
+2. In Thunderbird, open `Add-ons and Themes`.
+3. Click the gear icon and choose `Install Add-on From File...`.
+4. Select `tblatex.xpi`.
+5. Open `LaTeX It!` options and confirm `latex` / `dvipng` paths (or click autodetect).
+
+Development install (temporary)
+-------------------------------
+
+1. In Thunderbird, open `Tools -> Developer Tools -> Debug Add-ons`.
+2. Click `Load Temporary Add-on...`.
+3. Select this repository's `manifest.json`.
+
+Usage Notes
+-----------
+
+- Conversion works in **HTML compose mode**.
+- In a compose window, use the `LaTeX It!` compose action menu and click
+  `Run LaTeX in body`.
+- This converts expressions like `$\frac{2}{3}$` and
+  `$$\boxed{\frac{34}{31}}$$` into inline PNG images.
+- Default shortcut for silent conversion:
+  `Ctrl+Shift+L` (`Cmd+Shift+L` on macOS).

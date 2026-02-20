@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>LaTeX It! Options</title>
+    <link rel="stylesheet" href="options.css" />
+  </head>
+  <body>
+    <main>
+      <h1>LaTeX It! Options</h1>
+
+      <section>
+        <h2>Executables</h2>
+        <label>
+          Path to <code>latex</code>
+          <input id="latexPath" type="text" spellcheck="false" />
+        </label>
+        <label>
+          Path to <code>dvipng</code>
+          <input id="dvipngPath" type="text" spellcheck="false" />
+        </label>
+        <div class="row">
+          <button id="autodetect" type="button">Autodetect from PATH</button>
+        </div>
+      </section>
+
+      <section>
+        <h2>Appearance</h2>
+        <label class="checkbox">
+          <input id="autodpi" type="checkbox" />
+          Adapt image resolution automatically to font size
+        </label>
+        <label>
+          Font size when auto-DPI is disabled
+          <input id="fontPx" type="number" min="1" step="1" />
+        </label>
+      </section>
+
+      <section>
+        <h2>Debugging</h2>
+        <label class="checkbox">
+          <input id="log" type="checkbox" />
+          Generate a run report in the compose body
+        </label>
+        <label class="checkbox">
+          <input id="debug" type="checkbox" />
+          Include debug information in reports
+        </label>
+        <label class="checkbox">
+          <input id="keepTempFiles" type="checkbox" />
+          Keep generated temporary files
+        </label>
+      </section>
+
+      <section>
+        <h2>Template</h2>
+        <p>Use <code>__REPLACE_ME__</code> where your LaTeX expression should be inserted.</p>
+        <textarea id="template" rows="14"></textarea>
+      </section>
+
+      <section class="actions">
+        <button id="save" type="button">Save</button>
+        <button id="reset" type="button">Reset to defaults</button>
+      </section>
+
+      <p id="status" role="status" aria-live="polite"></p>
+    </main>
+
+    <script src="options.js"></script>
+  </body>
+</html>

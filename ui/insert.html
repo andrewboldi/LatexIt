@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Insert Complex LaTeX</title>
+    <link rel="stylesheet" href="insert.css" />
+  </head>
+  <body>
+    <main>
+      <h1>Insert Complex LaTeX</h1>
+      <p>
+        Edit the LaTeX document below. The visible result will be inserted at the
+        current cursor position in the compose editor.
+      </p>
+
+      <textarea id="latexExpression" rows="20"></textarea>
+
+      <section class="row">
+        <label class="checkbox">
+          <input id="autodpi" type="checkbox" />
+          Adapt image resolution automatically to font size
+        </label>
+        <label>
+          Font size
+          <input id="fontPx" type="number" min="1" step="1" />
+        </label>
+      </section>
+
+      <section class="actions">
+        <button id="resetTemplate" type="button">Load default template</button>
+        <button id="insert" type="button">Insert at cursor position</button>
+      </section>
+
+      <p id="status" role="status" aria-live="polite"></p>
+    </main>
+
+    <script src="insert.js"></script>
+  </body>
+</html>

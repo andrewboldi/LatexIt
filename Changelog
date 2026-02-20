@@ -1,3 +1,11 @@
+--v0.8.0
+
+- Ported add-on to Thunderbird 140+ MailExtension architecture.
+- Replaced legacy XUL overlay integration with compose action + compose scripts.
+- Added a Thunderbird experiment API to run local latex/dvipng binaries.
+- Replaced XUL options/insert dialogs with HTML options and popup dialogs.
+- Added migration of existing legacy tblatex.* user preferences.
+
 --vX.Y.Z
 
 - Improvements in the generated .png bitmaps: Transparent background

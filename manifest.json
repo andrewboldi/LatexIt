@@ -1,22 +1,63 @@
 {
   "manifest_version": 2,
-  "applications": {
-    "gecko": {
-      "id": "tblatex@xulforum.org",
-      "strict_min_version": "68.0a1",
-      "strict_max_version": "73.*"
-    }
-  },
-  "author": "Jonathan Protzenko",
   "name": "LaTeX It!",
   "description": "Automatically change $\\LaTeX$ into images in your HTML mails.",
-  "version": "0.7.4",
+  "version": "0.8.0",
+  "author": "Jonathan Protzenko",
   "homepage_url": "https://github.com/protz/LatexIt/wiki",
-  "legacy": {
-    "type": "xul",
-    "options": {
-      "page": "chrome://tblatex/content/options.xul",
-      "open_in_tab": false
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "tblatex@xulforum.org",
+      "strict_min_version": "140.0"
     }
+  },
+  "permissions": [
+    "compose",
+    "menus",
+    "notifications",
+    "storage",
+    "tabs"
+  ],
+  "background": {
+    "scripts": [
+      "background.js"
+    ]
+  },
+  "compose_action": {
+    "default_title": "LaTeX It!",
+    "default_icon": "icon.png",
+    "type": "menu"
+  },
+  "commands": {
+    "tblatex-run-silent": {
+      "description": "Run LaTeX It! silently in compose editor",
+      "suggested_key": {
+        "default": "Ctrl+Shift+L",
+        "mac": "Command+Shift+L"
+      }
+    }
+  },
+  "options_ui": {
+    "page": "ui/options.html",
+    "open_in_tab": true
+  },
+  "experiment_apis": {
+    "TBLatex": {
+      "schema": "api/TBLatex/schema.json",
+      "parent": {
+        "scopes": [
+          "addon_parent"
+        ],
+        "paths": [
+          [
+            "TBLatex"
+          ]
+        ],
+        "script": "api/TBLatex/implementation.js"
+      }
+    }
+  },
+  "icons": {
+    "64": "icon.png"
   }
 }

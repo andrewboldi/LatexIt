@@ -1,8 +1,17 @@
-EXCLUDES = $(addprefix --exclude , $(shell find . -iname '.*.sw*'))
-
 all: dist
 
-.PHONY: dist
+.PHONY: dist clean
 dist:
 	rm -f tblatex.xpi
-	zip tblatex.xpi $(EXCLUDES) --exclude Makefile --exclude TODO --exclude icon.xcf --exclude tblatex.xpi -r *
+	zip -r tblatex.xpi \
+		manifest.json \
+		icon.png \
+		background.js \
+		api \
+		compose \
+		ui \
+		README.md \
+		Changelog
+
+clean:
+	rm -f tblatex.xpi
