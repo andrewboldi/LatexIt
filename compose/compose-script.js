@@ -220,6 +220,48 @@ function makeImageFromResult(result, altText, titleText) {
   return img;
 }
 
+function moveCaretAwayFromTextNode(textNode) {
+  const selection = window.getSelection();
+  if (!selection || selection.rangeCount === 0) {
+    return false;
+  }
+
+  const anchorOnNode = selection.anchorNode === textNode;
+  const focusOnNode = selection.focusNode === textNode;
+  if (!anchorOnNode && !focusOnNode) {
+    return false;
+  }
+
+  try {
+    const range = document.createRange();
+    range.setStartAfter(textNode);
+    range.collapse(true);
+    selection.removeAllRanges();
+    selection.addRange(range);
+    return true;
+  } catch (error) {
+    // If caret relocation fails, proceed with replacement anyway.
+    return false;
+  }
+}
+
+function setCaretAfterNode(node) {
+  const selection = window.getSelection();
+  if (!selection) {
+    return;
+  }
+
+  try {
+    const range = document.createRange();
+    range.setStartAfter(node);
+    range.collapse(true);
+    selection.removeAllRanges();
+    selection.addRange(range);
+  } catch (error) {
+    // Ignore caret update failures.
+  }
+}
+
 async function latexify({ silent }) {
   const prefs = await getPrefs();
   const logs = [];
@@ -263,8 +305,12 @@ async function latexify({ silent }) {
     if ((renderResult.status === 0 || renderResult.status === 1) && renderResult.dataUrl) {
       const img = makeImageFromResult(renderResult, originalText, originalText);
       if (textNode.parentNode) {
+        const movedCaret = moveCaretAwayFromTextNode(textNode);
         textNode.parentNode.insertBefore(img, textNode);
         textNode.parentNode.removeChild(textNode);
+        if (movedCaret) {
+          setCaretAfterNode(img);
+        }
         undoStack.push(() => {
           if (!img.parentNode) {
             return;

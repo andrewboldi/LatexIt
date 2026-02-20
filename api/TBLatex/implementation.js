@@ -46,8 +46,35 @@ function createProcess(binaryFile) {
 
 function runProcess(binaryFile, args) {
   const process = createProcess(binaryFile);
-  process.run(true, args, args.length);
-  return process.exitValue;
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const settle = (callback, value) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      callback(value);
+    };
+
+    const observer = {
+      observe(_subject, topic) {
+        if (topic === "process-finished") {
+          settle(resolve, process.exitValue);
+          return;
+        }
+        if (topic === "process-failed") {
+          settle(reject, new Error(`Process failed: ${binaryFile.path}`));
+        }
+      },
+      QueryInterface: ChromeUtils.generateQI(["nsIObserver"]),
+    };
+
+    try {
+      process.runAsync(args, args.length, observer, false);
+    } catch (error) {
+      settle(reject, error);
+    }
+  });
 }
 
 function writeUtf8TextFile(file, data) {
@@ -64,17 +91,76 @@ function writeUtf8TextFile(file, data) {
   converter.close();
 }
 
-function readBinaryAsBase64(file) {
+function readFileBytes(file, maxBytes = -1) {
   const inputStream = Cc["@mozilla.org/network/file-input-stream;1"].createInstance(
     Ci.nsIFileInputStream
   );
   inputStream.init(file, 0x01, 0o444, 0);
 
-  const encoder = Cc["@mozilla.org/scriptablebase64encoder;1"].createInstance(
-    Ci.nsIScriptableBase64Encoder
+  const binaryStream = Cc["@mozilla.org/binaryinputstream;1"].createInstance(
+    Ci.nsIBinaryInputStream
   );
-  const output = encoder.encodeToString(inputStream, inputStream.available());
-  inputStream.close();
+  binaryStream.setInputStream(inputStream);
+
+  let size = 0;
+  try {
+    size = Math.max(0, Number(file.fileSize) || 0);
+  } catch (error) {
+    size = 0;
+  }
+  if (size <= 0) {
+    size = Math.max(0, binaryStream.available());
+  }
+
+  let count = size;
+  if (Number.isFinite(maxBytes) && maxBytes >= 0) {
+    count = Math.min(Math.max(0, Number(maxBytes) || 0), size);
+  }
+  const bytes = count > 0 ? binaryStream.readByteArray(count) : [];
+  try {
+    binaryStream.close();
+  } catch (error) {
+    // ignore
+  }
+  try {
+    inputStream.close();
+  } catch (error) {
+    // ignore
+  }
+
+  return bytes;
+}
+
+function hasPngSignature(bytes) {
+  if (!bytes || bytes.length < 8) {
+    return false;
+  }
+  const signature = [137, 80, 78, 71, 13, 10, 26, 10];
+  for (let i = 0; i < signature.length; i++) {
+    if (bytes[i] !== signature[i]) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function bytesToBase64(bytes) {
+  const alphabet =
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+  let output = "";
+
+  for (let i = 0; i < bytes.length; i += 3) {
+    const byte0 = (bytes[i] || 0) & 0xff;
+    const byte1 = (bytes[i + 1] || 0) & 0xff;
+    const byte2 = (bytes[i + 2] || 0) & 0xff;
+
+    const triplet = (byte0 << 16) | (byte1 << 8) | byte2;
+
+    output += alphabet[(triplet >> 18) & 0x3f];
+    output += alphabet[(triplet >> 12) & 0x3f];
+    output += i + 1 < bytes.length ? alphabet[(triplet >> 6) & 0x3f] : "=";
+    output += i + 2 < bytes.length ? alphabet[triplet & 0x3f] : "=";
+  }
 
   return output;
 }
@@ -330,7 +416,7 @@ var TBLatex = class extends ExtensionCommon.ExtensionAPI {
               "-interaction=batchmode",
               files.texFile.path,
             ];
-            const latexExit = runProcess(latexBin, latexArgs);
+            const latexExit = await runProcess(latexBin, latexArgs);
             if (latexExit !== 0) {
               status = 1;
               log += `LaTeX process returned ${latexExit}. Proceeding anyway...\n`;
@@ -372,7 +458,7 @@ var TBLatex = class extends ExtensionCommon.ExtensionAPI {
               files.pngFile.path,
               files.dviFile.path,
             ];
-            const dvipngExit = runProcess(dvipngBin, dvipngArgs);
+            const dvipngExit = await runProcess(dvipngBin, dvipngArgs);
             if (dvipngExit !== 0 || !files.pngFile.exists()) {
               return {
                 status: 2,
@@ -384,7 +470,19 @@ var TBLatex = class extends ExtensionCommon.ExtensionAPI {
               };
             }
 
-            const base64Png = readBinaryAsBase64(files.pngFile);
+            const signatureBytes = readFileBytes(files.pngFile, 8);
+            if (!hasPngSignature(signatureBytes)) {
+              return {
+                status: 2,
+                depth: 0,
+                dataUrl: "",
+                log:
+                  log +
+                  "!!! Direct renderer produced invalid PNG bytes. Rendering aborted.\n",
+              };
+            }
+            const pngBytes = readFileBytes(files.pngFile);
+            const base64Png = bytesToBase64(pngBytes);
             const dataUrl = `data:image/png;base64,${base64Png}`;
 
             return {

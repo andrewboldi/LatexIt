@@ -29,6 +29,7 @@ const MENU_IDS = Object.freeze({
 });
 
 let composeScriptRegistration = null;
+const latexifyInFlightByTab = new Map();
 let helperHealthCache = {
   url: "",
   checkedAt: 0,
@@ -355,6 +356,10 @@ async function sendComposeCommand(tabId, payload) {
 }
 
 async function runLatexify(tabId, silent) {
+  if (latexifyInFlightByTab.get(tabId)) {
+    return { ok: false, skipped: true, reason: "in-flight" };
+  }
+
   if (!(await isHtmlComposeTab(tabId))) {
     await notify(
       "LaTeX It!",
@@ -363,12 +368,15 @@ async function runLatexify(tabId, silent) {
     return { ok: false };
   }
 
+  latexifyInFlightByTab.set(tabId, true);
   try {
     return await sendComposeCommand(tabId, { command: "latexify", silent });
   } catch (error) {
     console.error("Latexify failed:", error);
     await notify("LaTeX It!", "Could not access compose editor for LaTeX conversion.");
     return { ok: false, error: String(error) };
+  } finally {
+    latexifyInFlightByTab.delete(tabId);
   }
 }
 
