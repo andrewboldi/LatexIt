@@ -28,14 +28,40 @@ const MENU_IDS = Object.freeze({
 
 let composeScriptRegistration = null;
 
+function normalizeExecutablePath(value) {
+  if (typeof value !== "string") {
+    return "";
+  }
+
+  const trimmed = value.trim();
+  if (
+    (trimmed.startsWith("\"") && trimmed.endsWith("\"")) ||
+    (trimmed.startsWith("'") && trimmed.endsWith("'"))
+  ) {
+    return trimmed.slice(1, -1).trim();
+  }
+  return trimmed;
+}
+
 async function getPrefs() {
   const { prefs = {} } = await browser.storage.local.get("prefs");
-  return { ...DEFAULT_PREFS, ...prefs };
+  const merged = { ...DEFAULT_PREFS, ...prefs };
+  merged.latexPath = normalizeExecutablePath(merged.latexPath);
+  merged.dvipngPath = normalizeExecutablePath(merged.dvipngPath);
+  return merged;
 }
 
 async function setPrefs(partialPrefs) {
+  const sanitized = { ...partialPrefs };
+  if (Object.prototype.hasOwnProperty.call(sanitized, "latexPath")) {
+    sanitized.latexPath = normalizeExecutablePath(sanitized.latexPath);
+  }
+  if (Object.prototype.hasOwnProperty.call(sanitized, "dvipngPath")) {
+    sanitized.dvipngPath = normalizeExecutablePath(sanitized.dvipngPath);
+  }
+
   const current = await getPrefs();
-  const next = { ...current, ...partialPrefs };
+  const next = { ...current, ...sanitized };
   await browser.storage.local.set({ prefs: next });
   return next;
 }
@@ -250,7 +276,10 @@ async function handleRuntimeMessage(message, sender) {
     case "autodetectPaths":
       return detectAndStorePaths(true);
     case "renderLatex": {
-      const prefs = await getPrefs();
+      let prefs = await getPrefs();
+      if (!prefs.latexPath || !prefs.dvipngPath) {
+        prefs = await detectAndStorePaths(false);
+      }
       const autodpi =
         typeof message.autodpiOverride === "boolean"
           ? message.autodpiOverride

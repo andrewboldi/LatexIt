@@ -3,14 +3,30 @@
 const Cc = Components.classes;
 const Ci = Components.interfaces;
 
-function initLocalFile(path) {
+function normalizeExecutablePath(path) {
   if (!path || typeof path !== "string") {
+    return "";
+  }
+
+  const trimmed = path.trim();
+  if (
+    (trimmed.startsWith("\"") && trimmed.endsWith("\"")) ||
+    (trimmed.startsWith("'") && trimmed.endsWith("'"))
+  ) {
+    return trimmed.slice(1, -1).trim();
+  }
+  return trimmed;
+}
+
+function initLocalFile(path) {
+  const normalized = normalizeExecutablePath(path);
+  if (!normalized) {
     return null;
   }
 
   try {
     const file = Cc["@mozilla.org/file/local;1"].createInstance(Ci.nsIFile);
-    file.initWithPath(path);
+    file.initWithPath(normalized);
     return file;
   } catch (error) {
     return null;
@@ -132,11 +148,15 @@ function detectExecutables() {
 
   if (!isWindows) {
     for (const suggestion of [
+      "/usr/bin",
+      "/bin",
       "/usr/local/bin",
       "/opt/homebrew/bin",
       "/usr/texbin",
       "/Library/TeX/texbin",
       "/usr/X11/bin",
+      "/usr/local/texlive/current/bin/x86_64-linux",
+      "/usr/local/texlive/current/bin/x86_64-darwin",
     ]) {
       if (!candidates.includes(suggestion)) {
         candidates.push(suggestion);
@@ -236,6 +256,8 @@ var TBLatex = class extends ExtensionCommon.ExtensionAPI {
           let status = 0;
           let log = "";
           let files = null;
+          latexPath = normalizeExecutablePath(latexPath);
+          dvipngPath = normalizeExecutablePath(dvipngPath);
 
           try {
             if (!checkPreviewPackage(latexExpression)) {
@@ -254,7 +276,7 @@ var TBLatex = class extends ExtensionCommon.ExtensionAPI {
                 depth: 0,
                 dataUrl: "",
                 log:
-                  "!!! Wrong path for 'latex' executable. Set it in LaTeX It! options.\n",
+                  `!!! Wrong path for 'latex' executable: "${latexPath || "(empty)"}". Set it in LaTeX It! options.\n`,
               };
             }
 
@@ -264,7 +286,7 @@ var TBLatex = class extends ExtensionCommon.ExtensionAPI {
                 depth: 0,
                 dataUrl: "",
                 log:
-                  "!!! Wrong path for 'dvipng' executable. Set it in LaTeX It! options.\n",
+                  `!!! Wrong path for 'dvipng' executable: "${dvipngPath || "(empty)"}". Set it in LaTeX It! options.\n`,
               };
             }
 
