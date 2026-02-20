@@ -26,6 +26,23 @@
       </section>
 
       <section>
+        <h2>Sandbox Helper Fallback</h2>
+        <p id="runtimeInfo">Runtime: detecting...</p>
+        <label class="checkbox">
+          <input id="helperFallbackEnabled" type="checkbox" />
+          Enable local helper fallback in sandboxed Thunderbird installs
+        </label>
+        <label>
+          Helper URL
+          <input id="helperUrl" type="text" spellcheck="false" />
+        </label>
+        <div class="row">
+          <button id="testHelper" type="button">Test helper</button>
+        </div>
+        <p class="hint">Start helper with: <code>python3 helper/tblatex_helper.py</code></p>
+      </section>
+
+      <section>
         <h2>Appearance</h2>
         <label class="checkbox">
           <input id="autodpi" type="checkbox" />

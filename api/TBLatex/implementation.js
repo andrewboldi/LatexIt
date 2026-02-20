@@ -238,13 +238,27 @@ function checkPreviewPackage(latexExpression) {
   return pattern.test(latexExpression);
 }
 
-function isSnapEnvironment() {
+function getRuntimeInfo() {
+  let sandboxed = false;
+  let sandboxType = "none";
+
   try {
     const env = Cc["@mozilla.org/process/environment;1"].getService(Ci.nsIEnvironment);
-    return env.exists("SNAP") || env.exists("SNAP_NAME") || env.exists("SNAP_INSTANCE_NAME");
+    if (env.exists("SNAP") || env.exists("SNAP_NAME") || env.exists("SNAP_INSTANCE_NAME")) {
+      sandboxed = true;
+      sandboxType = "snap";
+    } else if (env.exists("FLATPAK_ID")) {
+      sandboxed = true;
+      sandboxType = "flatpak";
+    }
   } catch (error) {
-    return false;
+    // ignore
   }
+
+  return {
+    sandboxed,
+    sandboxType,
+  };
 }
 
 var TBLatex = class extends ExtensionCommon.ExtensionAPI {
@@ -280,8 +294,9 @@ var TBLatex = class extends ExtensionCommon.ExtensionAPI {
             }
 
             if (!fileExists(latexPath)) {
-              const snapHint = isSnapEnvironment()
-                ? " (Thunderbird Snap build cannot access host /usr/bin TeX binaries)"
+              const runtimeInfo = getRuntimeInfo();
+              const snapHint = runtimeInfo.sandboxType === "snap"
+                ? " (Thunderbird Snap build cannot access host /usr/bin TeX binaries directly)"
                 : "";
               return {
                 status: 2,
@@ -293,8 +308,9 @@ var TBLatex = class extends ExtensionCommon.ExtensionAPI {
             }
 
             if (!fileExists(dvipngPath)) {
-              const snapHint = isSnapEnvironment()
-                ? " (Thunderbird Snap build cannot access host /usr/bin TeX binaries)"
+              const runtimeInfo = getRuntimeInfo();
+              const snapHint = runtimeInfo.sandboxType === "snap"
+                ? " (Thunderbird Snap build cannot access host /usr/bin TeX binaries directly)"
                 : "";
               return {
                 status: 2,
@@ -403,6 +419,10 @@ var TBLatex = class extends ExtensionCommon.ExtensionAPI {
 
         async readLegacyPrefs() {
           return readLegacyPrefs();
+        },
+
+        async getRuntimeInfo() {
+          return getRuntimeInfo();
         },
       },
     };

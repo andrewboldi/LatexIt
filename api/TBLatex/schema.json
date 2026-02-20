@@ -56,6 +56,12 @@
         "type": "function",
         "async": true,
         "parameters": []
+      },
+      {
+        "name": "getRuntimeInfo",
+        "type": "function",
+        "async": true,
+        "parameters": []
       }
     ]
   }

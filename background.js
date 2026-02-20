@@ -3,6 +3,8 @@
 const DEFAULT_PREFS = {
   latexPath: "",
   dvipngPath: "",
+  helperFallbackEnabled: true,
+  helperUrl: "http://127.0.0.1:3737",
   autodpi: true,
   fontPx: 16,
   log: true,
@@ -27,6 +29,12 @@ const MENU_IDS = Object.freeze({
 });
 
 let composeScriptRegistration = null;
+let helperHealthCache = {
+  url: "",
+  checkedAt: 0,
+  ok: false,
+  error: "",
+};
 
 function normalizeExecutablePath(value) {
   if (typeof value !== "string") {
@@ -43,11 +51,29 @@ function normalizeExecutablePath(value) {
   return trimmed;
 }
 
+function normalizeHelperUrl(value) {
+  if (typeof value !== "string") {
+    return DEFAULT_PREFS.helperUrl;
+  }
+
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return DEFAULT_PREFS.helperUrl;
+  }
+
+  const withScheme = /^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//.test(trimmed)
+    ? trimmed
+    : `http://${trimmed}`;
+  return withScheme.replace(/\/+$/, "");
+}
+
 async function getPrefs() {
   const { prefs = {} } = await browser.storage.local.get("prefs");
   const merged = { ...DEFAULT_PREFS, ...prefs };
   merged.latexPath = normalizeExecutablePath(merged.latexPath);
   merged.dvipngPath = normalizeExecutablePath(merged.dvipngPath);
+  merged.helperUrl = normalizeHelperUrl(merged.helperUrl);
+  merged.helperFallbackEnabled = Boolean(merged.helperFallbackEnabled);
   return merged;
 }
 
@@ -58,6 +84,12 @@ async function setPrefs(partialPrefs) {
   }
   if (Object.prototype.hasOwnProperty.call(sanitized, "dvipngPath")) {
     sanitized.dvipngPath = normalizeExecutablePath(sanitized.dvipngPath);
+  }
+  if (Object.prototype.hasOwnProperty.call(sanitized, "helperUrl")) {
+    sanitized.helperUrl = normalizeHelperUrl(sanitized.helperUrl);
+  }
+  if (Object.prototype.hasOwnProperty.call(sanitized, "helperFallbackEnabled")) {
+    sanitized.helperFallbackEnabled = Boolean(sanitized.helperFallbackEnabled);
   }
 
   const current = await getPrefs();
@@ -123,6 +155,177 @@ async function notify(title, message) {
     });
   } catch (error) {
     console.error("Notification failed:", error);
+  }
+}
+
+function buildTimeoutSignal(timeoutMs) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => {
+    controller.abort();
+  }, timeoutMs);
+
+  return {
+    signal: controller.signal,
+    done() {
+      clearTimeout(timer);
+    },
+  };
+}
+
+async function fetchJson(url, options = {}, timeoutMs = 5000) {
+  const timeout = buildTimeoutSignal(timeoutMs);
+  try {
+    const response = await fetch(url, {
+      ...options,
+      signal: timeout.signal,
+    });
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+    return await response.json();
+  } finally {
+    timeout.done();
+  }
+}
+
+async function checkHelperHealth(prefs, force = false) {
+  const url = normalizeHelperUrl(prefs.helperUrl);
+  const now = Date.now();
+  if (
+    !force &&
+    helperHealthCache.url === url &&
+    now - helperHealthCache.checkedAt < 10000
+  ) {
+    return {
+      ok: helperHealthCache.ok,
+      url,
+      error: helperHealthCache.error,
+    };
+  }
+
+  try {
+    await fetchJson(`${url}/health`, { method: "GET" }, 1500);
+    helperHealthCache = {
+      url,
+      checkedAt: now,
+      ok: true,
+      error: "",
+    };
+  } catch (error) {
+    helperHealthCache = {
+      url,
+      checkedAt: now,
+      ok: false,
+      error: String(error),
+    };
+  }
+
+  return {
+    ok: helperHealthCache.ok,
+    url,
+    error: helperHealthCache.error,
+  };
+}
+
+async function renderViaHelper(message, prefs, autodpi, fontPx) {
+  const url = normalizeHelperUrl(prefs.helperUrl);
+  return fetchJson(
+    `${url}/render`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        latexExpression: message.latexExpression || "",
+        fontPx: message.fontPx || "",
+        fontColor: message.fontColor || "",
+        latexPath: prefs.latexPath,
+        dvipngPath: prefs.dvipngPath,
+        autodpi,
+        defaultFontPx: fontPx,
+        debug: prefs.debug,
+        keepTempFiles: prefs.keepTempFiles,
+      }),
+    },
+    30000
+  );
+}
+
+async function renderLatexMessage(message) {
+  let prefs = await getPrefs();
+  if (!prefs.latexPath || !prefs.dvipngPath) {
+    prefs = await detectAndStorePaths(false);
+  }
+
+  const runtimeInfo = await browser.TBLatex.getRuntimeInfo().catch(() => ({
+    sandboxed: false,
+    sandboxType: "none",
+  }));
+  const autodpi =
+    typeof message.autodpiOverride === "boolean"
+      ? message.autodpiOverride
+      : prefs.autodpi;
+  const fontPx =
+    Number.isFinite(message.defaultFontPxOverride) &&
+    message.defaultFontPxOverride > 0
+      ? Math.round(message.defaultFontPxOverride)
+      : prefs.fontPx;
+
+  let directResult;
+  try {
+    directResult = await browser.TBLatex.render(
+      message.latexExpression || "",
+      message.fontPx || "",
+      message.fontColor || "",
+      prefs.latexPath,
+      prefs.dvipngPath,
+      autodpi,
+      fontPx,
+      prefs.debug,
+      prefs.keepTempFiles
+    );
+  } catch (error) {
+    directResult = {
+      status: 2,
+      depth: 0,
+      dataUrl: "",
+      log: `!!! Direct renderer failed: ${String(error)}\n`,
+    };
+  }
+
+  const directSucceeded = directResult && (directResult.status === 0 || directResult.status === 1);
+  const fallbackEnabled = prefs.helperFallbackEnabled && runtimeInfo && runtimeInfo.sandboxed;
+  if (directSucceeded || !fallbackEnabled) {
+    return directResult;
+  }
+
+  const health = await checkHelperHealth(prefs, false);
+  if (!health.ok) {
+    const helperGuidance =
+      `\n!!! Local helper fallback is enabled but not reachable at ${health.url}.\n` +
+      "Start it with: python3 helper/tblatex_helper.py\n";
+    return {
+      ...directResult,
+      log: `${directResult.log || ""}${helperGuidance}`,
+    };
+  }
+
+  try {
+    const helperResult = await renderViaHelper(message, prefs, autodpi, fontPx);
+    const helperLog = `*** Used local helper fallback (${health.url}) in ${runtimeInfo.sandboxType} sandbox mode.\n`;
+    return {
+      ...helperResult,
+      log: `${helperLog}${helperResult.log || ""}`,
+    };
+  } catch (error) {
+    const helperErrorLog =
+      `\n!!! Local helper fallback failed at ${health.url}: ${String(error)}\n` +
+      "Ensure helper/tblatex_helper.py is running and try again.\n";
+    return {
+      ...directResult,
+      log: `${directResult.log || ""}${helperErrorLog}`,
+    };
   }
 }
 
@@ -275,31 +478,13 @@ async function handleRuntimeMessage(message, sender) {
       return resetPrefs();
     case "autodetectPaths":
       return detectAndStorePaths(true);
-    case "renderLatex": {
-      let prefs = await getPrefs();
-      if (!prefs.latexPath || !prefs.dvipngPath) {
-        prefs = await detectAndStorePaths(false);
-      }
-      const autodpi =
-        typeof message.autodpiOverride === "boolean"
-          ? message.autodpiOverride
-          : prefs.autodpi;
-      const fontPx =
-        Number.isFinite(message.defaultFontPxOverride) &&
-        message.defaultFontPxOverride > 0
-          ? Math.round(message.defaultFontPxOverride)
-          : prefs.fontPx;
-      return browser.TBLatex.render(
-        message.latexExpression || "",
-        message.fontPx || "",
-        message.fontColor || "",
-        prefs.latexPath,
-        prefs.dvipngPath,
-        autodpi,
-        fontPx,
-        prefs.debug,
-        prefs.keepTempFiles
-      );
+    case "renderLatex":
+      return renderLatexMessage(message || {});
+    case "getRuntimeInfo":
+      return browser.TBLatex.getRuntimeInfo();
+    case "testHelper": {
+      const prefs = await getPrefs();
+      return checkHelperHealth(prefs, true);
     }
     case "openOptions":
       return browser.runtime.openOptionsPage();

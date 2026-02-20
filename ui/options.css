@@ -82,3 +82,8 @@ button#reset {
 #status {
   min-height: 1.4em;
 }
+
+.hint {
+  margin: 8px 0 0 0;
+  color: #444;
+}

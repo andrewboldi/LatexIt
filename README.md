@@ -19,6 +19,7 @@ Features
 - Insert complex LaTeX at cursor position
 - Configure executable paths, template, DPI behavior, and debug/log options
 - Auto-detect `latex` and `dvipng` in your PATH
+- Auto-fallback to local helper service for sandboxed Thunderbird installs
 
 Requirements
 ------------
@@ -27,9 +28,8 @@ Requirements
 - A local TeX setup with:
   - `latex`
   - `dvipng`
-- Important: the Thunderbird **Snap** package is sandboxed and cannot execute
-  host TeX binaries from `/usr/bin`. Use a non-snap Thunderbird build
-  (deb/tarball/manual install) for this add-on.
+- For sandboxed Thunderbird (Snap/Flatpak), run the local helper service:
+  `python3 helper/tblatex_helper.py`
 
 Build
 -----
@@ -55,6 +55,8 @@ make
 3. Click the gear icon and choose `Install Add-on From File...`.
 4. Select `tblatex.xpi`.
 5. Open `LaTeX It!` options and confirm `latex` / `dvipng` paths (or click autodetect).
+6. If Thunderbird is sandboxed, enable helper fallback in options and make sure
+   helper URL matches your helper service.
 
 Development install (temporary)
 -------------------------------
@@ -73,3 +75,20 @@ Usage Notes
   `$$\boxed{\frac{34}{31}}$$` into inline PNG images.
 - Default shortcut for silent conversion:
   `Ctrl+Shift+L` (`Cmd+Shift+L` on macOS).
+
+Sandbox Fallback (Snap/Flatpak)
+-------------------------------
+
+1. Start helper:
+
+```sh
+python3 helper/tblatex_helper.py
+```
+
+2. In extension options:
+- Enable `local helper fallback`.
+- Set helper URL to `http://127.0.0.1:3737` (or your custom host/port).
+- Click `Test helper`.
+
+When direct binary execution is blocked by sandboxing, LaTeX It! will
+automatically route rendering through the helper.

@@ -9,6 +9,8 @@ dist:
 		background.js \
 		api \
 		compose \
+		helper/tblatex_helper.py \
+		helper/README.md \
 		ui \
 		README.md \
 		Changelog

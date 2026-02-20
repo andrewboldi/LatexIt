@@ -3,6 +3,8 @@
 const FIELDS = [
   "latexPath",
   "dvipngPath",
+  "helperFallbackEnabled",
+  "helperUrl",
   "autodpi",
   "fontPx",
   "log",
@@ -87,6 +89,38 @@ async function autodetect() {
   }
 }
 
+async function updateRuntimeInfo() {
+  const runtimeInfoElement = document.getElementById("runtimeInfo");
+  try {
+    const runtimeInfo = await browser.runtime.sendMessage({ command: "getRuntimeInfo" });
+    if (runtimeInfo && runtimeInfo.sandboxed) {
+      runtimeInfoElement.textContent = `Runtime: sandboxed (${runtimeInfo.sandboxType}). Helper fallback is recommended.`;
+    } else {
+      runtimeInfoElement.textContent = "Runtime: not sandboxed. Helper fallback is optional.";
+    }
+  } catch (error) {
+    runtimeInfoElement.textContent = `Runtime: unavailable (${String(error)})`;
+  }
+}
+
+async function testHelper() {
+  const prefs = readPrefsFromForm();
+  await browser.runtime.sendMessage({
+    command: "setPrefs",
+    prefs: {
+      helperUrl: prefs.helperUrl,
+      helperFallbackEnabled: prefs.helperFallbackEnabled,
+    },
+  });
+
+  const status = await browser.runtime.sendMessage({ command: "testHelper" });
+  if (status && status.ok) {
+    setStatus(`Helper reachable at ${status.url}.`);
+  } else {
+    setStatus(`Helper unreachable at ${(status && status.url) || "configured URL"}.`);
+  }
+}
+
 document.getElementById("save").addEventListener("click", () => {
   savePrefs().catch((error) => {
     setStatus(`Save failed: ${String(error)}`);
@@ -105,6 +139,12 @@ document.getElementById("autodetect").addEventListener("click", () => {
   });
 });
 
-loadPrefs().catch((error) => {
+document.getElementById("testHelper").addEventListener("click", () => {
+  testHelper().catch((error) => {
+    setStatus(`Helper test failed: ${String(error)}`);
+  });
+});
+
+Promise.all([loadPrefs(), updateRuntimeInfo()]).catch((error) => {
   setStatus(`Unable to load options: ${String(error)}`);
 });

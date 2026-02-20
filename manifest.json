@@ -2,7 +2,7 @@
   "manifest_version": 2,
   "name": "LaTeX It!",
   "description": "Automatically change $\\LaTeX$ into images in your HTML mails.",
-  "version": "0.8.0",
+  "version": "0.8.1",
   "author": "Jonathan Protzenko",
   "homepage_url": "https://github.com/protz/LatexIt/wiki",
   "browser_specific_settings": {
@@ -13,6 +13,8 @@
   },
   "permissions": [
     "compose",
+    "http://127.0.0.1/*",
+    "http://localhost/*",
     "menus",
     "notifications",
     "storage",
