@@ -5,11 +5,11 @@
   "version": "0.8.1",
   "author": "Jonathan Protzenko",
   "homepage_url": "https://github.com/protz/LatexIt/wiki",
-  "browser_specific_settings": {
+  "applications": {
     "gecko": {
       "id": "tblatex@xulforum.org",
       "strict_min_version": "140.0",
-      "strict_max_version": "150.*"
+      "strict_max_version": "140.*"
     }
   },
   "permissions": [
