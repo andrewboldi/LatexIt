@@ -10,6 +10,8 @@ dist:
 		api \
 		compose \
 		helper/tblatex_helper.py \
+		helper/install-systemd-user.sh \
+		helper/uninstall-systemd-user.sh \
 		helper/README.md \
 		ui \
 		README.md \

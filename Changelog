@@ -3,6 +3,7 @@
 - Added automatic local-helper fallback for sandboxed Thunderbird builds (Snap/Flatpak).
 - Added helper runtime detection and helper health checks in options UI.
 - Added `helper/tblatex_helper.py` service for out-of-sandbox LaTeX rendering.
+- Added Linux `systemd --user` install/uninstall scripts for helper auto-start.
 
 --v0.8.0
 

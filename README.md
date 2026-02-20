@@ -28,8 +28,8 @@ Requirements
 - A local TeX setup with:
   - `latex`
   - `dvipng`
-- For sandboxed Thunderbird (Snap/Flatpak), run the local helper service:
-  `python3 helper/tblatex_helper.py`
+- For sandboxed Thunderbird (Snap/Flatpak), use the local helper service.
+  Preferred on Linux: install it as a `systemd --user` service.
 
 Build
 -----
@@ -79,13 +79,19 @@ Usage Notes
 Sandbox Fallback (Snap/Flatpak)
 -------------------------------
 
-1. Start helper:
+Primary option (Linux): install helper as a user service
+
+```sh
+bash helper/install-systemd-user.sh
+```
+
+Fallback option: run helper manually
 
 ```sh
 python3 helper/tblatex_helper.py
 ```
 
-2. In extension options:
+Then in extension options:
 - Enable `local helper fallback`.
 - Set helper URL to `http://127.0.0.1:3737` (or your custom host/port).
 - Click `Test helper`.
