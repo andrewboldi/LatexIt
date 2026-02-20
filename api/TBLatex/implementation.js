@@ -289,7 +289,7 @@ function readLegacyPrefs() {
     ["dvipngPath", "tblatex.dvipng_path", "string", ""],
     ["autodpi", "tblatex.autodpi", "bool", true],
     ["fontPx", "tblatex.font_px", "int", 16],
-    ["log", "tblatex.log", "bool", true],
+    ["log", "tblatex.log", "bool", false],
     ["debug", "tblatex.debug", "bool", false],
     ["keepTempFiles", "tblatex.keeptempfiles", "bool", false],
     ["template", "tblatex.template", "string", ""],
