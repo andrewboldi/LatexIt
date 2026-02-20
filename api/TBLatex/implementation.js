@@ -2,6 +2,7 @@
 
 const Cc = Components.classes;
 const Ci = Components.interfaces;
+const RENDER_SCALE = 2;
 
 function normalizeExecutablePath(path) {
   if (!path || typeof path !== "string") {
@@ -436,11 +437,12 @@ var TBLatex = class extends ExtensionCommon.ExtensionAPI {
             const sizePx = autodpi
               ? parseFontPx(fontPx, defaultFontPx)
               : defaultFontPx;
-            const dpi = (sizePx * 72.27) / 10;
+            const baseDpi = (sizePx * 72.27) / 10;
+            const dpi = baseDpi * RENDER_SCALE;
             const safeColor = fontColor && fontColor.trim() ? fontColor : "RGB 0 0 0";
 
             if (debug) {
-              log += `*** Using dpi=${dpi} and color=${safeColor}\n`;
+              log += `*** Using dpi=${dpi} (base=${baseDpi}, scale=${RENDER_SCALE}x) and color=${safeColor}\n`;
             }
 
             const dvipngArgs = [
@@ -489,6 +491,7 @@ var TBLatex = class extends ExtensionCommon.ExtensionAPI {
               status,
               depth: 0,
               dataUrl,
+              renderScale: RENDER_SCALE,
               log,
             };
           } catch (error) {

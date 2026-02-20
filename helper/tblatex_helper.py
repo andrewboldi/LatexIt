@@ -24,6 +24,7 @@ PREVIEW_PACKAGE_RE = re.compile(
     re.MULTILINE,
 )
 FONT_NUMBER_RE = re.compile(r"[-+]?\d*\.?\d+")
+RENDER_SCALE = 2.0
 
 
 def normalize_path(value: Any) -> str:
@@ -132,7 +133,8 @@ def render(payload: dict[str, Any]) -> dict[str, Any]:
         if autodpi
         else float(default_font_px)
     )
-    dpi = font_px_value * 72.27 / 10.0
+    base_dpi = font_px_value * 72.27 / 10.0
+    dpi = base_dpi * RENDER_SCALE
     font_color = str(payload.get("fontColor", "")).strip() or "RGB 0 0 0"
 
     status = 0
@@ -209,13 +211,16 @@ def render(payload: dict[str, Any]) -> dict[str, Any]:
         if debug:
             log_lines.append(f"*** helper latex path: {latex_path}")
             log_lines.append(f"*** helper dvipng path: {dvipng_path}")
-            log_lines.append(f"*** helper dpi: {dpi}")
+            log_lines.append(
+                f"*** helper dpi: {dpi} (base={base_dpi}, scale={RENDER_SCALE}x)"
+            )
             log_lines.append(f"*** helper font color: {font_color}")
 
         return {
             "status": status,
             "depth": 0,
             "dataUrl": f"data:image/png;base64,{encoded}",
+            "renderScale": RENDER_SCALE,
             "log": ("\n".join(log_lines) + "\n") if log_lines else "",
         }
     finally:

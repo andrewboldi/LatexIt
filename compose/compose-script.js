@@ -212,11 +212,32 @@ async function runLatexRender(latexExpression, fontPx, fontColor, overrides = {}
 }
 
 function makeImageFromResult(result, altText, titleText) {
+  const renderScale = Number(result && result.renderScale) > 0
+    ? Number(result.renderScale)
+    : 1;
+  const depth = Number(result && result.depth) || 0;
   const img = document.createElement("img");
   img.alt = altText;
   img.title = titleText;
-  img.style.verticalAlign = `-${result.depth || 0}px`;
+  img.style.verticalAlign = `-${depth / renderScale}px`;
   img.src = result.dataUrl;
+
+  if (renderScale > 1) {
+    const applyDisplayScale = () => {
+      if (!img.naturalWidth || !img.naturalHeight) {
+        return;
+      }
+      img.width = Math.max(1, Math.round(img.naturalWidth / renderScale));
+      img.height = Math.max(1, Math.round(img.naturalHeight / renderScale));
+    };
+
+    if (img.complete) {
+      applyDisplayScale();
+    } else {
+      img.addEventListener("load", applyDisplayScale, { once: true });
+    }
+  }
+
   return img;
 }
 
