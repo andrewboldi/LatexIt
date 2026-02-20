@@ -19,7 +19,7 @@ function initLocalFile(path) {
 
 function fileExists(path) {
   const file = initLocalFile(path);
-  return Boolean(file && file.exists() && file.isFile());
+  return Boolean(file && file.exists());
 }
 
 function createProcess(binaryFile) {
