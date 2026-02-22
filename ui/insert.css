@@ -20,7 +20,8 @@ h1 {
 }
 
 textarea,
-input[type="number"] {
+input[type="number"],
+select {
   width: 100%;
   border: 1px solid #bcbcc4;
   border-radius: 6px;
@@ -30,6 +31,14 @@ input[type="number"] {
 
 textarea {
   resize: vertical;
+}
+
+.history {
+  margin: 12px 0;
+}
+
+#formulaHistory {
+  min-height: 8.5em;
 }
 
 .row {
@@ -61,6 +70,11 @@ button {
 }
 
 #resetTemplate {
+  border-color: #666;
+  background: #666;
+}
+
+#refreshHistory {
   border-color: #666;
   background: #666;
 }

@@ -3,9 +3,11 @@
 const LOG_PANEL_ID = "tblatex-log";
 const LATEX_PATTERN = /\$\$[^\$]+\$\$|\$[^\$]+\$|\\\[[\s\S]*?\\\]|\\\([\s\S]*?\\\)/g;
 const INLINE_LATEX_EXACT_PATTERN = /^(?:\$\$[^\$]+\$\$|\$[^\$]+\$|\\\[[\s\S]*\\\]|\\\([\s\S]*\\\))$/;
+const FORMULA_HISTORY_LIMIT = 50;
 
 let undoStack = [];
 let lastComplexExpression = "";
+let formulaHistory = [];
 
 function insertAfter(nodeToInsert, referenceNode) {
   const parentNode = referenceNode.parentNode;
@@ -307,6 +309,79 @@ function applyFormulaMetadata(img, options = {}) {
   }
 }
 
+function summarizeFormulaPreview(text) {
+  const normalized = normalizeLatexSnippet(text || "");
+  if (!normalized) {
+    return "";
+  }
+  if (normalized.length <= 120) {
+    return normalized;
+  }
+  return `${normalized.slice(0, 117)}...`;
+}
+
+function normalizeFormulaSeed(seed) {
+  if (!seed || typeof seed !== "object") {
+    return null;
+  }
+
+  const sourceDocument = normalizeSourceValue(seed.sourceDocument);
+  const sourceExpression = normalizeSourceValue(seed.sourceExpression);
+  let sourceMode = normalizeSourceValue(seed.sourceMode);
+
+  if (!sourceDocument && !sourceExpression) {
+    return null;
+  }
+
+  if (sourceMode !== "inline" && sourceMode !== "complex") {
+    if (sourceExpression) {
+      sourceMode = "inline";
+    } else {
+      sourceMode = isInlineLatexExpression(sourceDocument) ? "inline" : "complex";
+    }
+  }
+
+  const preview = summarizeFormulaPreview(sourceExpression || sourceDocument);
+  const dedupeKey = sourceDocument || sourceExpression;
+  return {
+    sourceMode,
+    sourceExpression,
+    sourceDocument,
+    preview,
+    dedupeKey,
+  };
+}
+
+function addFormulaToHistory(seed) {
+  const normalizedSeed = normalizeFormulaSeed(seed);
+  if (!normalizedSeed) {
+    return;
+  }
+
+  formulaHistory = formulaHistory.filter(
+    (item) => item.dedupeKey !== normalizedSeed.dedupeKey
+  );
+  formulaHistory.unshift({
+    ...normalizedSeed,
+    savedAt: Date.now(),
+  });
+
+  if (formulaHistory.length > FORMULA_HISTORY_LIMIT) {
+    formulaHistory.length = FORMULA_HISTORY_LIMIT;
+  }
+}
+
+function getFormulaHistory() {
+  return formulaHistory.map((item, index) => ({
+    id: String(index),
+    sourceMode: item.sourceMode,
+    sourceExpression: item.sourceExpression,
+    sourceDocument: item.sourceDocument,
+    preview: item.preview,
+    savedAt: item.savedAt,
+  }));
+}
+
 function makeImageFromResult(result, altText, titleText, options = {}) {
   const renderScale = Number(result && result.renderScale) > 0
     ? Number(result.renderScale)
@@ -508,6 +583,9 @@ function readFormulaSeedFromImage(imageNode) {
 function getInsertComplexSeed() {
   const selectedImage = getSelectedImageNode();
   const selectedSeed = readFormulaSeedFromImage(selectedImage);
+  if (selectedSeed) {
+    addFormulaToHistory(selectedSeed);
+  }
   const sourceDocument = selectedSeed
     ? selectedSeed.sourceDocument || ""
     : lastComplexExpression || "";
@@ -632,11 +710,12 @@ async function latexify({ silent }) {
     }
 
     if ((renderResult.status === 0 || renderResult.status === 1) && renderResult.dataUrl) {
-      const img = makeImageFromResult(renderResult, originalText, originalText, {
+      const formulaSeed = {
         sourceMode: "inline",
         sourceExpression: originalText,
         sourceDocument: latexExpression,
-      });
+      };
+      const img = makeImageFromResult(renderResult, originalText, originalText, formulaSeed);
       if (textNode.parentNode) {
         const movedCaret = moveCaretAwayFromTextNode(textNode);
         textNode.parentNode.insertBefore(img, textNode);
@@ -652,6 +731,7 @@ async function latexify({ silent }) {
           img.parentNode.removeChild(img);
         });
       }
+      addFormulaToHistory(formulaSeed);
       converted++;
     } else {
       failed++;
@@ -738,12 +818,13 @@ async function insertComplex({ latexExpression, autodpi, fontPx }) {
     );
     const sourceMode = extractedInlineExpression ? "inline" : "complex";
     const accessibleText = extractedInlineExpression || latexExpression;
-    const img = makeImageFromResult(renderResult, accessibleText, accessibleText, {
+    const formulaSeed = {
       sourceMode,
       sourceExpression: extractedInlineExpression,
       sourceDocument: latexExpression,
       complexSource: latexExpression,
-    });
+    };
+    const img = makeImageFromResult(renderResult, accessibleText, accessibleText, formulaSeed);
 
     if (selectedImage && selectedImage.parentNode) {
       selectedImage.parentNode.insertBefore(img, selectedImage);
@@ -766,6 +847,7 @@ async function insertComplex({ latexExpression, autodpi, fontPx }) {
       });
     }
 
+    addFormulaToHistory(formulaSeed);
     lastComplexExpression = latexExpression;
     if (prefs.log && logs.length) {
       showLogPanel(logs.join("\n"));
@@ -806,6 +888,8 @@ browser.runtime.onMessage.addListener((message) => {
       return Promise.resolve(getSelectionText());
     case "getInsertComplexSeed":
       return Promise.resolve(getInsertComplexSeed());
+    case "getFormulaHistory":
+      return Promise.resolve(getFormulaHistory());
     case "hasLogReport":
       return Promise.resolve(Boolean(document.getElementById(LOG_PANEL_ID)));
     case "removeLogReport": {

@@ -5,6 +5,7 @@ const oldMarker = "__REPLACEME__";
 
 let prefs = null;
 let tabId = null;
+let formulaHistory = [];
 
 function setStatus(message) {
   document.getElementById("status").textContent = message;
@@ -103,6 +104,109 @@ async function getSelection(tabIdValue) {
   }
 }
 
+async function getFormulaHistory(tabIdValue) {
+  if (!tabIdValue && tabIdValue !== 0) {
+    return [];
+  }
+
+  try {
+    const history = await browser.tabs.sendMessage(tabIdValue, {
+      command: "getFormulaHistory",
+    });
+    return Array.isArray(history) ? history : [];
+  } catch (error) {
+    return [];
+  }
+}
+
+function truncatePreview(value) {
+  if (typeof value !== "string") {
+    return "";
+  }
+  const normalized = value.replace(/\s+/g, " ").trim();
+  if (normalized.length <= 110) {
+    return normalized;
+  }
+  return `${normalized.slice(0, 107)}...`;
+}
+
+function formatHistoryItem(item) {
+  const mode = item && item.sourceMode === "inline" ? "Inline" : "Complex";
+  const rawPreview =
+    (item && item.preview) ||
+    (item && item.sourceExpression) ||
+    (item && item.sourceDocument) ||
+    "";
+  const preview = truncatePreview(rawPreview) || "(empty)";
+  return `[${mode}] ${preview}`;
+}
+
+function renderFormulaHistory() {
+  const list = document.getElementById("formulaHistory");
+  const loadButton = document.getElementById("loadHistory");
+
+  while (list.firstChild) {
+    list.removeChild(list.firstChild);
+  }
+
+  formulaHistory.forEach((item, index) => {
+    const option = document.createElement("option");
+    option.value = String(index);
+    option.textContent = formatHistoryItem(item);
+    list.appendChild(option);
+  });
+
+  const hasItems = formulaHistory.length > 0;
+  list.disabled = !hasItems;
+  loadButton.disabled = !hasItems;
+  if (hasItems) {
+    list.selectedIndex = 0;
+  }
+}
+
+function getSelectedHistoryEntry() {
+  const list = document.getElementById("formulaHistory");
+  const index = Number.parseInt(list.value, 10);
+  if (!Number.isInteger(index) || index < 0 || index >= formulaHistory.length) {
+    return null;
+  }
+  return formulaHistory[index];
+}
+
+function applySeedToEditor(seed) {
+  const sourceDocument = (seed && (seed.sourceDocument || seed.complexSource)) || "";
+  if (sourceDocument) {
+    showComplexSource(sourceDocument);
+    return;
+  }
+
+  if (seed && seed.sourceExpression) {
+    populateTemplate((prefs && prefs.template) || "", seed.sourceExpression);
+    return;
+  }
+
+  populateTemplate((prefs && prefs.template) || "", (seed && seed.selection) || "");
+}
+
+async function refreshFormulaHistory() {
+  if (tabId === null) {
+    return;
+  }
+  formulaHistory = await getFormulaHistory(tabId);
+  renderFormulaHistory();
+}
+
+function loadSelectedHistoryFormula() {
+  const entry = getSelectedHistoryEntry();
+  if (!entry) {
+    setStatus("Select a formula from history first.");
+    return;
+  }
+
+  applySeedToEditor(entry);
+  setStatus("Loaded formula from history.");
+}
+
 function showComplexSource(source) {
   const textarea = document.getElementById("latexExpression");
   textarea.value = source;
@@ -135,15 +239,14 @@ async function load() {
   document.getElementById("autodpi").checked = Boolean(prefs.autodpi);
   document.getElementById("fontPx").value = Number(prefs.fontPx) || 16;
 
-  const seed = await getSelection(tabId);
-  const sourceDocument = seed.sourceDocument || seed.complexSource || "";
-  if (sourceDocument) {
-    showComplexSource(sourceDocument);
-  } else if (seed.sourceExpression) {
-    populateTemplate(prefs.template, seed.sourceExpression);
-  } else {
-    populateTemplate(prefs.template, seed.selection);
-  }
+  const [seed, history] = await Promise.all([
+    getSelection(tabId),
+    getFormulaHistory(tabId),
+  ]);
+
+  formulaHistory = history;
+  renderFormulaHistory();
+  applySeedToEditor(seed);
 }
 
 function updateAutodpiUi() {
@@ -190,6 +293,20 @@ document.getElementById("resetTemplate").addEventListener("click", () => {
   if (prefs) {
     populateTemplate(prefs.template, "");
   }
+});
+
+document.getElementById("loadHistory").addEventListener("click", () => {
+  loadSelectedHistoryFormula();
+});
+
+document.getElementById("refreshHistory").addEventListener("click", () => {
+  refreshFormulaHistory().catch((error) => {
+    setStatus(`History refresh failed: ${String(error)}`);
+  });
+});
+
+document.getElementById("formulaHistory").addEventListener("dblclick", () => {
+  loadSelectedHistoryFormula();
 });
 
 document.getElementById("autodpi").addEventListener("change", () => {

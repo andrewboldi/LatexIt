@@ -1,3 +1,10 @@
+--v0.8.15
+
+- Added a recent-formulas history list in the Insert Complex LaTeX dialog.
+- Added load/refresh actions to reuse and edit previously rendered formulas.
+- Tracks both inline and complex formulas in compose-session history with de-duplication.
+- Keeps robust metadata recovery for formulas selected from the message body.
+
 --v0.8.14
 
 - Added edit-after-insert support for inline LaTeX formulas rendered from body markers.

@@ -18,6 +18,15 @@
         replaces that formula in place.
       </p>
 
+      <section class="history">
+        <label for="formulaHistory">Recent formulas in this compose window</label>
+        <select id="formulaHistory" size="6"></select>
+        <section class="actions">
+          <button id="loadHistory" type="button" disabled>Load selected formula</button>
+          <button id="refreshHistory" type="button">Refresh history</button>
+        </section>
+      </section>
+
       <textarea id="latexExpression" rows="20"></textarea>
 
       <section class="row">
