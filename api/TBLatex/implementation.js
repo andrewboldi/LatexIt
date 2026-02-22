@@ -302,6 +302,7 @@ function readLegacyPrefs() {
     ["log", "tblatex.log", "bool", false],
     ["debug", "tblatex.debug", "bool", false],
     ["warnOnUnconvertedLatex", "tblatex.warn_on_unconverted", "bool", true],
+    ["persistFormulaHistory", "tblatex.persist_formula_history", "bool", false],
     ["keepTempFiles", "tblatex.keeptempfiles", "bool", false],
     ["template", "tblatex.template", "string", ""],
   ];

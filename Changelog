@@ -1,3 +1,9 @@
+--v0.8.16
+
+- Added a settings option to persist recent formula history across compose windows.
+- Persistent history is now stored locally when enabled and reused by new compose sessions.
+- Keeps session-only behavior by default when persistent history is disabled.
+
 --v0.8.15
 
 - Added a recent-formulas history list in the Insert Complex LaTeX dialog.

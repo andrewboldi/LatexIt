@@ -11,6 +11,7 @@ const FIELDS = [
   "log",
   "debug",
   "warnOnUnconvertedLatex",
+  "persistFormulaHistory",
   "keepTempFiles",
   "template",
 ];

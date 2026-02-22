@@ -11,6 +11,7 @@ const DEFAULT_PREFS = {
   log: false,
   debug: false,
   warnOnUnconvertedLatex: true,
+  persistFormulaHistory: false,
   keepTempFiles: false,
   template:
     "\\documentclass{article}\n" +
@@ -32,6 +33,7 @@ const MENU_IDS = Object.freeze({
 
 let composeScriptRegistration = null;
 const latexifyInFlightByTab = new Map();
+const FORMULA_HISTORY_LIMIT = 50;
 let helperHealthCache = {
   url: "",
   checkedAt: 0,
@@ -78,6 +80,71 @@ function normalizeRenderScale(value) {
   return Math.min(8, Math.max(1, parsed));
 }
 
+function normalizeFormulaHistoryString(value) {
+  if (typeof value !== "string") {
+    return "";
+  }
+  const trimmed = value.trim();
+  return trimmed ? trimmed : "";
+}
+
+function normalizeFormulaHistoryEntry(entry) {
+  if (!entry || typeof entry !== "object") {
+    return null;
+  }
+
+  const sourceDocument = normalizeFormulaHistoryString(entry.sourceDocument);
+  const sourceExpression = normalizeFormulaHistoryString(entry.sourceExpression);
+  if (!sourceDocument && !sourceExpression) {
+    return null;
+  }
+
+  let sourceMode = normalizeFormulaHistoryString(entry.sourceMode);
+  if (sourceMode !== "inline" && sourceMode !== "complex") {
+    sourceMode = sourceExpression ? "inline" : "complex";
+  }
+
+  const preview = normalizeFormulaHistoryString(entry.preview);
+  const savedAtRaw = Number(entry.savedAt);
+  const savedAt = Number.isFinite(savedAtRaw) && savedAtRaw > 0 ? savedAtRaw : Date.now();
+
+  return {
+    sourceMode,
+    sourceExpression,
+    sourceDocument,
+    preview,
+    savedAt,
+  };
+}
+
+function normalizeFormulaHistory(history) {
+  if (!Array.isArray(history)) {
+    return [];
+  }
+
+  const normalized = [];
+  const seen = new Set();
+  for (const candidate of history) {
+    const item = normalizeFormulaHistoryEntry(candidate);
+    if (!item) {
+      continue;
+    }
+
+    const dedupeKey = item.sourceDocument || item.sourceExpression;
+    if (seen.has(dedupeKey)) {
+      continue;
+    }
+    seen.add(dedupeKey);
+    normalized.push(item);
+
+    if (normalized.length >= FORMULA_HISTORY_LIMIT) {
+      break;
+    }
+  }
+
+  return normalized;
+}
+
 async function getPrefs() {
   const { prefs = {} } = await browser.storage.local.get("prefs");
   const merged = { ...DEFAULT_PREFS, ...prefs };
@@ -86,6 +153,7 @@ async function getPrefs() {
   merged.helperUrl = normalizeHelperUrl(merged.helperUrl);
   merged.renderScale = normalizeRenderScale(merged.renderScale);
   merged.helperFallbackEnabled = Boolean(merged.helperFallbackEnabled);
+  merged.persistFormulaHistory = Boolean(merged.persistFormulaHistory);
   return merged;
 }
 
@@ -108,6 +176,9 @@ async function setPrefs(partialPrefs) {
   }
   if (Object.prototype.hasOwnProperty.call(sanitized, "warnOnUnconvertedLatex")) {
     sanitized.warnOnUnconvertedLatex = Boolean(sanitized.warnOnUnconvertedLatex);
+  }
+  if (Object.prototype.hasOwnProperty.call(sanitized, "persistFormulaHistory")) {
+    sanitized.persistFormulaHistory = Boolean(sanitized.persistFormulaHistory);
   }
 
   const current = await getPrefs();
@@ -392,6 +463,39 @@ async function removeComposeRunReport(tabId) {
   }
 }
 
+async function getFormulaHistoryStore() {
+  const prefs = await getPrefs();
+  if (!prefs.persistFormulaHistory) {
+    return { enabled: false, history: [] };
+  }
+
+  const { formulaHistoryStore = [] } = await browser.storage.local.get("formulaHistoryStore");
+  const history = normalizeFormulaHistory(formulaHistoryStore);
+  if (history.length !== formulaHistoryStore.length) {
+    await browser.storage.local.set({ formulaHistoryStore: history });
+  }
+
+  return {
+    enabled: true,
+    history,
+  };
+}
+
+async function setFormulaHistoryStore(history) {
+  const prefs = await getPrefs();
+  if (!prefs.persistFormulaHistory) {
+    return { enabled: false, saved: false, count: 0 };
+  }
+
+  const normalized = normalizeFormulaHistory(history);
+  await browser.storage.local.set({ formulaHistoryStore: normalized });
+  return {
+    enabled: true,
+    saved: true,
+    count: normalized.length,
+  };
+}
+
 async function confirmComposeSendWithLatexCheck(tabId) {
   if (!tabId) {
     return true;
@@ -548,6 +652,10 @@ async function handleRuntimeMessage(message, sender) {
       const prefs = await getPrefs();
       return checkHelperHealth(prefs, true);
     }
+    case "getFormulaHistoryStore":
+      return getFormulaHistoryStore();
+    case "setFormulaHistoryStore":
+      return setFormulaHistoryStore(message.history || []);
     case "openOptions":
       return browser.runtime.openOptionsPage();
     case "runLatexifyFromDialog":

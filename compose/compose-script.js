@@ -8,6 +8,8 @@ const FORMULA_HISTORY_LIMIT = 50;
 let undoStack = [];
 let lastComplexExpression = "";
 let formulaHistory = [];
+let formulaHistoryHydrated = false;
+let formulaHistorySyncTimer = null;
 
 function insertAfter(nodeToInsert, referenceNode) {
   const parentNode = referenceNode.parentNode;
@@ -352,7 +354,7 @@ function normalizeFormulaSeed(seed) {
   };
 }
 
-function addFormulaToHistory(seed) {
+function addFormulaToHistory(seed, options = {}) {
   const normalizedSeed = normalizeFormulaSeed(seed);
   if (!normalizedSeed) {
     return;
@@ -369,6 +371,20 @@ function addFormulaToHistory(seed) {
   if (formulaHistory.length > FORMULA_HISTORY_LIMIT) {
     formulaHistory.length = FORMULA_HISTORY_LIMIT;
   }
+
+  if (options.sync !== false) {
+    scheduleFormulaHistorySync();
+  }
+}
+
+function mergeFormulaHistorySeeds(seeds) {
+  if (!Array.isArray(seeds) || !seeds.length) {
+    return;
+  }
+
+  for (let i = seeds.length - 1; i >= 0; i--) {
+    addFormulaToHistory(seeds[i], { sync: false });
+  }
 }
 
 function getFormulaHistory() {
@@ -380,6 +396,53 @@ function getFormulaHistory() {
     preview: item.preview,
     savedAt: item.savedAt,
   }));
+}
+
+async function ensureFormulaHistoryHydrated() {
+  if (formulaHistoryHydrated) {
+    return;
+  }
+  formulaHistoryHydrated = true;
+
+  const localSnapshot = formulaHistory.slice();
+  formulaHistory = [];
+
+  try {
+    const result = await browser.runtime.sendMessage({
+      command: "getFormulaHistoryStore",
+    });
+    const storedHistory = result && Array.isArray(result.history) ? result.history : [];
+    mergeFormulaHistorySeeds(storedHistory);
+  } catch (error) {
+    // Keep local-only history if storage lookup fails.
+  }
+
+  mergeFormulaHistorySeeds(localSnapshot);
+}
+
+function scheduleFormulaHistorySync() {
+  if (formulaHistorySyncTimer !== null) {
+    return;
+  }
+
+  formulaHistorySyncTimer = setTimeout(async () => {
+    formulaHistorySyncTimer = null;
+
+    try {
+      await ensureFormulaHistoryHydrated();
+      await browser.runtime.sendMessage({
+        command: "setFormulaHistoryStore",
+        history: getFormulaHistory(),
+      });
+    } catch (error) {
+      // Ignore history sync failures and keep local history available.
+    }
+  }, 250);
+}
+
+async function getFormulaHistoryForUi() {
+  await ensureFormulaHistoryHydrated();
+  return getFormulaHistory();
 }
 
 function makeImageFromResult(result, altText, titleText, options = {}) {
@@ -889,7 +952,7 @@ browser.runtime.onMessage.addListener((message) => {
     case "getInsertComplexSeed":
       return Promise.resolve(getInsertComplexSeed());
     case "getFormulaHistory":
-      return Promise.resolve(getFormulaHistory());
+      return getFormulaHistoryForUi();
     case "hasLogReport":
       return Promise.resolve(Boolean(document.getElementById(LOG_PANEL_ID)));
     case "removeLogReport": {
