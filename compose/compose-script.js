@@ -2,6 +2,7 @@
 
 const LOG_PANEL_ID = "tblatex-log";
 const LATEX_PATTERN = /\$\$[^\$]+\$\$|\$[^\$]+\$|\\\[[\s\S]*?\\\]|\\\([\s\S]*?\\\)/g;
+const INLINE_LATEX_EXACT_PATTERN = /^(?:\$\$[^\$]+\$\$|\$[^\$]+\$|\\\[[\s\S]*\\\]|\\\([\s\S]*\\\))$/;
 
 let undoStack = [];
 let lastComplexExpression = "";
@@ -75,7 +76,7 @@ function splitTextNodes(node) {
   return latexNodes;
 }
 
-function replaceMarker(template, replacement) {
+function findTemplateMarker(template) {
   const marker = "__REPLACE_ME__";
   const oldMarker = "__REPLACEME__";
 
@@ -88,15 +89,46 @@ function replaceMarker(template, replacement) {
   }
 
   if (index < 0) {
+    return null;
+  }
+
+  return { index, markerLength };
+}
+
+function replaceMarker(template, replacement) {
+  const markerInfo = findTemplateMarker(template);
+
+  if (!markerInfo) {
     const log =
       "!!! Could not find the placeholder '__REPLACE_ME__' in your template.\n" +
       "Please add it where your LaTeX expression should be inserted.\n";
     return [null, log];
   }
 
+  const { index, markerLength } = markerInfo;
   const output =
     template.slice(0, index) + replacement + template.slice(index + markerLength);
   return [output, ""];
+}
+
+function extractExpressionFromTemplate(template, latexDocument) {
+  if (typeof template !== "string" || typeof latexDocument !== "string") {
+    return "";
+  }
+
+  const markerInfo = findTemplateMarker(template);
+  if (!markerInfo) {
+    return "";
+  }
+
+  const prefix = template.slice(0, markerInfo.index);
+  const suffix = template.slice(markerInfo.index + markerInfo.markerLength);
+  if (!latexDocument.startsWith(prefix) || !latexDocument.endsWith(suffix)) {
+    return "";
+  }
+
+  const expression = latexDocument.slice(prefix.length, latexDocument.length - suffix.length);
+  return INLINE_LATEX_EXACT_PATTERN.test(expression.trim()) ? expression : "";
 }
 
 function normalizeColor(color) {
@@ -212,6 +244,69 @@ async function runLatexRender(latexExpression, fontPx, fontColor, overrides = {}
   });
 }
 
+function normalizeSourceValue(value) {
+  if (typeof value !== "string") {
+    return "";
+  }
+  return value.trim() ? value : "";
+}
+
+function isLikelyLatexDocument(text) {
+  if (typeof text !== "string") {
+    return false;
+  }
+
+  const trimmed = text.trim();
+  if (!trimmed) {
+    return false;
+  }
+
+  return (
+    trimmed.includes("\\documentclass") ||
+    trimmed.includes("\\begin{document}") ||
+    trimmed.includes("\\end{document}") ||
+    trimmed.includes("__REPLACE_ME__") ||
+    trimmed.includes("__REPLACEME__")
+  );
+}
+
+function isInlineLatexExpression(text) {
+  return typeof text === "string" && INLINE_LATEX_EXACT_PATTERN.test(text.trim());
+}
+
+function applyFormulaMetadata(img, options = {}) {
+  const legacyComplexSource = normalizeSourceValue(options.complexSource);
+  const sourceDocument = normalizeSourceValue(
+    options.sourceDocument || legacyComplexSource
+  );
+  const sourceExpression = normalizeSourceValue(options.sourceExpression);
+  let sourceMode = normalizeSourceValue(options.sourceMode);
+
+  if (sourceMode !== "inline" && sourceMode !== "complex") {
+    if (sourceExpression && isInlineLatexExpression(sourceExpression)) {
+      sourceMode = "inline";
+    } else if (sourceDocument) {
+      sourceMode = isInlineLatexExpression(sourceDocument) ? "inline" : "complex";
+    } else {
+      sourceMode = "";
+    }
+  }
+
+  if (sourceMode) {
+    img.dataset.tblatexMode = sourceMode;
+  }
+  if (sourceDocument) {
+    img.dataset.tblatexDoc = sourceDocument;
+  }
+  if (sourceExpression) {
+    img.dataset.tblatexExpr = sourceExpression;
+  }
+  if (legacyComplexSource) {
+    // Compatibility with early 0.8.x builds that only used this single field.
+    img.dataset.tblatexSource = legacyComplexSource;
+  }
+}
+
 function makeImageFromResult(result, altText, titleText, options = {}) {
   const renderScale = Number(result && result.renderScale) > 0
     ? Number(result.renderScale)
@@ -222,10 +317,7 @@ function makeImageFromResult(result, altText, titleText, options = {}) {
   img.title = titleText;
   img.style.verticalAlign = `-${depth / renderScale}px`;
   img.src = result.dataUrl;
-  if (typeof options.complexSource === "string" && options.complexSource.trim()) {
-    img.dataset.tblatexMode = "complex";
-    img.dataset.tblatexSource = options.complexSource;
-  }
+  applyFormulaMetadata(img, options);
 
   if (renderScale > 1) {
     const applyDisplayScale = () => {
@@ -321,45 +413,113 @@ function normalizeLatexSnippet(snippet) {
   return snippet.replace(/\s+/g, " ").trim();
 }
 
-function readComplexSourceFromImage(imageNode) {
+function getImageDataField(imageNode, datasetKey, attributeName) {
   if (!imageNode || imageNode.tagName !== "IMG") {
     return "";
   }
 
-  const dataSource = imageNode.dataset ? imageNode.dataset.tblatexSource : "";
-  if (typeof dataSource === "string" && dataSource.trim()) {
-    return dataSource;
+  const datasetValue = imageNode.dataset ? imageNode.dataset[datasetKey] : "";
+  if (typeof datasetValue === "string" && datasetValue.trim()) {
+    return datasetValue;
   }
 
-  const candidates = [imageNode.title, imageNode.alt]
-    .filter((value) => typeof value === "string")
-    .map((value) => value.trim())
-    .filter(Boolean);
-
-  for (const candidate of candidates) {
-    if (
-      candidate.includes("\\documentclass") ||
-      candidate.includes("\\begin{document}") ||
-      candidate.includes("__REPLACE_ME__") ||
-      candidate.includes("__REPLACEME__")
-    ) {
-      return candidate;
-    }
-  }
-
-  if (imageNode.dataset && imageNode.dataset.tblatexMode === "complex") {
-    return candidates[0] || "";
+  const attributeValue = imageNode.getAttribute(attributeName);
+  if (typeof attributeValue === "string" && attributeValue.trim()) {
+    return attributeValue;
   }
 
   return "";
 }
 
+function pushUniqueCandidate(candidates, value) {
+  if (typeof value !== "string" || !value.trim()) {
+    return;
+  }
+  if (!candidates.includes(value)) {
+    candidates.push(value);
+  }
+}
+
+function readFormulaSeedFromImage(imageNode) {
+  if (!imageNode || imageNode.tagName !== "IMG") {
+    return null;
+  }
+
+  const candidates = [];
+
+  const rawMode = getImageDataField(imageNode, "tblatexMode", "data-tblatex-mode");
+  const rawDocument = getImageDataField(imageNode, "tblatexDoc", "data-tblatex-doc");
+  const rawExpression = getImageDataField(imageNode, "tblatexExpr", "data-tblatex-expr");
+  const legacySource = getImageDataField(imageNode, "tblatexSource", "data-tblatex-source");
+
+  pushUniqueCandidate(candidates, rawDocument);
+  pushUniqueCandidate(candidates, rawExpression);
+  pushUniqueCandidate(candidates, legacySource);
+  pushUniqueCandidate(candidates, imageNode.title || "");
+  pushUniqueCandidate(candidates, imageNode.alt || "");
+
+  let sourceDocument = normalizeSourceValue(rawDocument);
+  let sourceExpression = normalizeSourceValue(rawExpression);
+  let sourceMode = rawMode === "inline" || rawMode === "complex" ? rawMode : "";
+
+  if (!sourceDocument) {
+    for (const candidate of candidates) {
+      if (isLikelyLatexDocument(candidate)) {
+        sourceDocument = candidate;
+        break;
+      }
+    }
+  }
+
+  if (!sourceExpression) {
+    for (const candidate of candidates) {
+      if (isInlineLatexExpression(candidate)) {
+        sourceExpression = candidate;
+        break;
+      }
+    }
+  }
+
+  if (!sourceMode) {
+    if (sourceExpression) {
+      sourceMode = "inline";
+    } else if (sourceDocument) {
+      sourceMode = isInlineLatexExpression(sourceDocument) ? "inline" : "complex";
+    } else if (legacySource) {
+      sourceMode = isInlineLatexExpression(legacySource) ? "inline" : "complex";
+    }
+  }
+
+  if (sourceMode === "inline" && !sourceExpression && sourceDocument && isInlineLatexExpression(sourceDocument)) {
+    sourceExpression = sourceDocument;
+  }
+
+  if (!sourceDocument && !sourceExpression) {
+    return null;
+  }
+
+  return {
+    sourceMode,
+    sourceDocument,
+    sourceExpression,
+  };
+}
+
 function getInsertComplexSeed() {
   const selectedImage = getSelectedImageNode();
-  const selectedComplexSource = readComplexSourceFromImage(selectedImage);
+  const selectedSeed = readFormulaSeedFromImage(selectedImage);
+  const sourceDocument = selectedSeed
+    ? selectedSeed.sourceDocument || ""
+    : lastComplexExpression || "";
+  const sourceExpression = selectedSeed ? selectedSeed.sourceExpression || "" : "";
+  const sourceMode = selectedSeed ? selectedSeed.sourceMode || "" : "";
+
   return {
     selection: getSelectionText(),
-    complexSource: selectedComplexSource || lastComplexExpression || "",
+    sourceMode,
+    sourceExpression,
+    sourceDocument,
+    complexSource: sourceDocument,
   };
 }
 
@@ -472,7 +632,11 @@ async function latexify({ silent }) {
     }
 
     if ((renderResult.status === 0 || renderResult.status === 1) && renderResult.dataUrl) {
-      const img = makeImageFromResult(renderResult, originalText, originalText);
+      const img = makeImageFromResult(renderResult, originalText, originalText, {
+        sourceMode: "inline",
+        sourceExpression: originalText,
+        sourceDocument: latexExpression,
+      });
       if (textNode.parentNode) {
         const movedCaret = moveCaretAwayFromTextNode(textNode);
         textNode.parentNode.insertBefore(img, textNode);
@@ -568,7 +732,16 @@ async function insertComplex({ latexExpression, autodpi, fontPx }) {
 
   if ((renderResult.status === 0 || renderResult.status === 1) && renderResult.dataUrl) {
     const selectedImage = getSelectedImageNode();
-    const img = makeImageFromResult(renderResult, latexExpression, latexExpression, {
+    const extractedInlineExpression = extractExpressionFromTemplate(
+      prefs.template,
+      latexExpression
+    );
+    const sourceMode = extractedInlineExpression ? "inline" : "complex";
+    const accessibleText = extractedInlineExpression || latexExpression;
+    const img = makeImageFromResult(renderResult, accessibleText, accessibleText, {
+      sourceMode,
+      sourceExpression: extractedInlineExpression,
+      sourceDocument: latexExpression,
       complexSource: latexExpression,
     });
 

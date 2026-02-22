@@ -1,3 +1,10 @@
+--v0.8.14
+
+- Added edit-after-insert support for inline LaTeX formulas rendered from body markers.
+- Improved formula-source persistence by storing mode, expression, and full document metadata.
+- Added resilient edit-source recovery from image data attributes with alt/title fallback.
+- Improved insert dialog behavior to preload selected formula source for in-place replacement.
+
 --v0.8.13
 
 - Added a send-time warning when unconverted LaTeX markers remain in the compose body.

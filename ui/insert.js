@@ -57,6 +57,9 @@ async function getSelection(tabIdValue) {
   if (!tabIdValue && tabIdValue !== 0) {
     return {
       selection: "",
+      sourceMode: "",
+      sourceExpression: "",
+      sourceDocument: "",
       complexSource: "",
     };
   }
@@ -69,6 +72,10 @@ async function getSelection(tabIdValue) {
     if (seed && typeof seed === "object") {
       return {
         selection: typeof seed.selection === "string" ? seed.selection : "",
+        sourceMode: typeof seed.sourceMode === "string" ? seed.sourceMode : "",
+        sourceExpression:
+          typeof seed.sourceExpression === "string" ? seed.sourceExpression : "",
+        sourceDocument: typeof seed.sourceDocument === "string" ? seed.sourceDocument : "",
         complexSource: typeof seed.complexSource === "string" ? seed.complexSource : "",
       };
     }
@@ -80,11 +87,17 @@ async function getSelection(tabIdValue) {
     const selection = await browser.tabs.sendMessage(tabIdValue, { command: "getSelection" });
     return {
       selection: typeof selection === "string" ? selection : "",
+      sourceMode: "",
+      sourceExpression: "",
+      sourceDocument: "",
       complexSource: "",
     };
   } catch (error) {
     return {
       selection: "",
+      sourceMode: "",
+      sourceExpression: "",
+      sourceDocument: "",
       complexSource: "",
     };
   }
@@ -123,8 +136,11 @@ async function load() {
   document.getElementById("fontPx").value = Number(prefs.fontPx) || 16;
 
   const seed = await getSelection(tabId);
-  if (seed.complexSource) {
-    showComplexSource(seed.complexSource);
+  const sourceDocument = seed.sourceDocument || seed.complexSource || "";
+  if (sourceDocument) {
+    showComplexSource(sourceDocument);
+  } else if (seed.sourceExpression) {
+    populateTemplate(prefs.template, seed.sourceExpression);
   } else {
     populateTemplate(prefs.template, seed.selection);
   }
