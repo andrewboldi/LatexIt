@@ -10,6 +10,7 @@ const DEFAULT_PREFS = {
   renderScale: 4,
   log: false,
   debug: false,
+  warnOnUnconvertedLatex: true,
   keepTempFiles: false,
   template:
     "\\documentclass{article}\n" +
@@ -104,6 +105,9 @@ async function setPrefs(partialPrefs) {
   }
   if (Object.prototype.hasOwnProperty.call(sanitized, "helperFallbackEnabled")) {
     sanitized.helperFallbackEnabled = Boolean(sanitized.helperFallbackEnabled);
+  }
+  if (Object.prototype.hasOwnProperty.call(sanitized, "warnOnUnconvertedLatex")) {
+    sanitized.warnOnUnconvertedLatex = Boolean(sanitized.warnOnUnconvertedLatex);
   }
 
   const current = await getPrefs();
@@ -388,6 +392,23 @@ async function removeComposeRunReport(tabId) {
   }
 }
 
+async function confirmComposeSendWithLatexCheck(tabId) {
+  if (!tabId) {
+    return true;
+  }
+
+  try {
+    const result = await sendComposeCommand(tabId, {
+      command: "confirmSendWithLatexCheck",
+    });
+    return !(result && result.okToSend === false);
+  } catch (error) {
+    // Don't block sending if the compose script is unavailable for this tab.
+    console.warn("Could not run send-time LaTeX check:", error);
+    return true;
+  }
+}
+
 async function runLatexify(tabId, silent) {
   if (latexifyInFlightByTab.get(tabId)) {
     return { ok: false, skipped: true, reason: "in-flight" };
@@ -587,6 +608,16 @@ if (browser.compose && browser.compose.onBeforeSend) {
     }
 
     await removeComposeRunReport(tab.id);
+    const prefs = await getPrefs();
+    if (!prefs.warnOnUnconvertedLatex) {
+      return {};
+    }
+
+    const okToSend = await confirmComposeSendWithLatexCheck(tab.id);
+    if (!okToSend) {
+      return { cancel: true };
+    }
+
     return {};
   });
 }

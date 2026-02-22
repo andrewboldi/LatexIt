@@ -10,6 +10,7 @@ const FIELDS = [
   "renderScale",
   "log",
   "debug",
+  "warnOnUnconvertedLatex",
   "keepTempFiles",
   "template",
 ];

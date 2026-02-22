@@ -1,3 +1,10 @@
+--v0.8.13
+
+- Added a send-time warning when unconverted LaTeX markers remain in the compose body.
+- Added a setting to enable/disable the unconverted-LaTeX send warning.
+- Restored editable "Insert complex LaTeX" flow by reusing the last complex input.
+- Preserved complex source data on inserted images so selected formulas can be edited.
+
 --v0.8.1
 
 - Added automatic local-helper fallback for sandboxed Thunderbird builds (Snap/Flatpak).

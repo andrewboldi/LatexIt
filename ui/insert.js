@@ -55,15 +55,60 @@ function populateTemplate(template, selection) {
 
 async function getSelection(tabIdValue) {
   if (!tabIdValue && tabIdValue !== 0) {
-    return "";
+    return {
+      selection: "",
+      complexSource: "",
+    };
+  }
+
+  try {
+    const seed = await browser.tabs.sendMessage(tabIdValue, {
+      command: "getInsertComplexSeed",
+    });
+
+    if (seed && typeof seed === "object") {
+      return {
+        selection: typeof seed.selection === "string" ? seed.selection : "",
+        complexSource: typeof seed.complexSource === "string" ? seed.complexSource : "",
+      };
+    }
+  } catch (error) {
+    // Fall back to legacy selection command below.
   }
 
   try {
     const selection = await browser.tabs.sendMessage(tabIdValue, { command: "getSelection" });
-    return typeof selection === "string" ? selection : "";
+    return {
+      selection: typeof selection === "string" ? selection : "",
+      complexSource: "",
+    };
   } catch (error) {
-    return "";
+    return {
+      selection: "",
+      complexSource: "",
+    };
   }
+}
+
+function showComplexSource(source) {
+  const textarea = document.getElementById("latexExpression");
+  textarea.value = source;
+  textarea.focus();
+
+  let start = source.indexOf(marker);
+  let length = marker.length;
+  if (start < 0) {
+    start = source.indexOf(oldMarker);
+    length = oldMarker.length;
+  }
+
+  if (start >= 0) {
+    textarea.setSelectionRange(start, start + length);
+    return;
+  }
+
+  const end = source.length;
+  textarea.setSelectionRange(end, end);
 }
 
 async function load() {
@@ -77,8 +122,12 @@ async function load() {
   document.getElementById("autodpi").checked = Boolean(prefs.autodpi);
   document.getElementById("fontPx").value = Number(prefs.fontPx) || 16;
 
-  const selection = await getSelection(tabId);
-  populateTemplate(prefs.template, selection);
+  const seed = await getSelection(tabId);
+  if (seed.complexSource) {
+    showComplexSource(seed.complexSource);
+  } else {
+    populateTemplate(prefs.template, seed.selection);
+  }
 }
 
 function updateAutodpiUi() {

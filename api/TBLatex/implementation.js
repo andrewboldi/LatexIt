@@ -301,6 +301,7 @@ function readLegacyPrefs() {
     ["renderScale", "tblatex.render_scale", "int", DEFAULT_RENDER_SCALE],
     ["log", "tblatex.log", "bool", false],
     ["debug", "tblatex.debug", "bool", false],
+    ["warnOnUnconvertedLatex", "tblatex.warn_on_unconverted", "bool", true],
     ["keepTempFiles", "tblatex.keeptempfiles", "bool", false],
     ["template", "tblatex.template", "string", ""],
   ];

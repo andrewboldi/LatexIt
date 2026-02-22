@@ -4,6 +4,7 @@ const LOG_PANEL_ID = "tblatex-log";
 const LATEX_PATTERN = /\$\$[^\$]+\$\$|\$[^\$]+\$|\\\[[\s\S]*?\\\]|\\\([\s\S]*?\\\)/g;
 
 let undoStack = [];
+let lastComplexExpression = "";
 
 function insertAfter(nodeToInsert, referenceNode) {
   const parentNode = referenceNode.parentNode;
@@ -211,7 +212,7 @@ async function runLatexRender(latexExpression, fontPx, fontColor, overrides = {}
   });
 }
 
-function makeImageFromResult(result, altText, titleText) {
+function makeImageFromResult(result, altText, titleText, options = {}) {
   const renderScale = Number(result && result.renderScale) > 0
     ? Number(result.renderScale)
     : 1;
@@ -221,6 +222,10 @@ function makeImageFromResult(result, altText, titleText) {
   img.title = titleText;
   img.style.verticalAlign = `-${depth / renderScale}px`;
   img.src = result.dataUrl;
+  if (typeof options.complexSource === "string" && options.complexSource.trim()) {
+    img.dataset.tblatexMode = "complex";
+    img.dataset.tblatexSource = options.complexSource;
+  }
 
   if (renderScale > 1) {
     const applyDisplayScale = () => {
@@ -281,6 +286,149 @@ function setCaretAfterNode(node) {
   } catch (error) {
     // Ignore caret update failures.
   }
+}
+
+function getSelectedImageNode() {
+  const selection = window.getSelection();
+  if (!selection || selection.rangeCount === 0) {
+    return null;
+  }
+
+  const range = selection.getRangeAt(0);
+  if (range.startContainer === range.endContainer && range.startContainer) {
+    const container = range.startContainer;
+    if (container.nodeType === Node.ELEMENT_NODE && range.endOffset === range.startOffset + 1) {
+      const selectedNode = container.childNodes[range.startOffset];
+      if (selectedNode && selectedNode.nodeType === Node.ELEMENT_NODE && selectedNode.tagName === "IMG") {
+        return selectedNode;
+      }
+    }
+  }
+
+  for (const node of [selection.anchorNode, selection.focusNode, range.commonAncestorContainer]) {
+    if (node && node.nodeType === Node.ELEMENT_NODE && node.tagName === "IMG") {
+      return node;
+    }
+  }
+
+  return null;
+}
+
+function normalizeLatexSnippet(snippet) {
+  if (typeof snippet !== "string") {
+    return "";
+  }
+  return snippet.replace(/\s+/g, " ").trim();
+}
+
+function readComplexSourceFromImage(imageNode) {
+  if (!imageNode || imageNode.tagName !== "IMG") {
+    return "";
+  }
+
+  const dataSource = imageNode.dataset ? imageNode.dataset.tblatexSource : "";
+  if (typeof dataSource === "string" && dataSource.trim()) {
+    return dataSource;
+  }
+
+  const candidates = [imageNode.title, imageNode.alt]
+    .filter((value) => typeof value === "string")
+    .map((value) => value.trim())
+    .filter(Boolean);
+
+  for (const candidate of candidates) {
+    if (
+      candidate.includes("\\documentclass") ||
+      candidate.includes("\\begin{document}") ||
+      candidate.includes("__REPLACE_ME__") ||
+      candidate.includes("__REPLACEME__")
+    ) {
+      return candidate;
+    }
+  }
+
+  if (imageNode.dataset && imageNode.dataset.tblatexMode === "complex") {
+    return candidates[0] || "";
+  }
+
+  return "";
+}
+
+function getInsertComplexSeed() {
+  const selectedImage = getSelectedImageNode();
+  const selectedComplexSource = readComplexSourceFromImage(selectedImage);
+  return {
+    selection: getSelectionText(),
+    complexSource: selectedComplexSource || lastComplexExpression || "",
+  };
+}
+
+function collectUnconvertedLatex(limit = 3) {
+  if (!document.body) {
+    return { count: 0, samples: [] };
+  }
+
+  const samples = [];
+  let count = 0;
+  const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+  for (let textNode = walker.nextNode(); textNode; textNode = walker.nextNode()) {
+    const value = textNode.nodeValue || "";
+    if (!value) {
+      continue;
+    }
+
+    const parent = textNode.parentElement;
+    if (!parent) {
+      continue;
+    }
+
+    if (
+      parent.id === LOG_PANEL_ID ||
+      parent.closest(`#${LOG_PANEL_ID}`) ||
+      parent.tagName === "SCRIPT" ||
+      parent.tagName === "STYLE"
+    ) {
+      continue;
+    }
+
+    const matches = value.match(LATEX_PATTERN);
+    if (!matches || !matches.length) {
+      continue;
+    }
+
+    count += matches.length;
+    for (const match of matches) {
+      if (samples.length >= limit) {
+        break;
+      }
+      const normalized = normalizeLatexSnippet(match);
+      if (normalized) {
+        samples.push(normalized);
+      }
+    }
+  }
+
+  return { count, samples };
+}
+
+function confirmSendWithLatexCheck() {
+  const { count, samples } = collectUnconvertedLatex(3);
+  if (!count) {
+    return { okToSend: true, count: 0, samples: [] };
+  }
+
+  const noun = count === 1 ? "expression" : "expressions";
+  const sampleText = samples.length ? `\n\nExamples:\n${samples.join("\n")}` : "";
+  const message =
+    `LaTeX It! found ${count} unconverted LaTeX ${noun} in this message.` +
+    `${sampleText}\n\nSend anyway?`;
+  const okToSend = window.confirm(message);
+
+  return {
+    okToSend,
+    count,
+    samples,
+  };
 }
 
 async function latexify({ silent }) {
@@ -419,13 +567,33 @@ async function insertComplex({ latexExpression, autodpi, fontPx }) {
   }
 
   if ((renderResult.status === 0 || renderResult.status === 1) && renderResult.dataUrl) {
-    const img = makeImageFromResult(renderResult, latexExpression, latexExpression);
-    insertImageAtSelection(img);
-    undoStack.push(() => {
-      if (img.parentNode) {
-        img.parentNode.removeChild(img);
-      }
+    const selectedImage = getSelectedImageNode();
+    const img = makeImageFromResult(renderResult, latexExpression, latexExpression, {
+      complexSource: latexExpression,
     });
+
+    if (selectedImage && selectedImage.parentNode) {
+      selectedImage.parentNode.insertBefore(img, selectedImage);
+      selectedImage.parentNode.removeChild(selectedImage);
+      setCaretAfterNode(img);
+      undoStack.push(() => {
+        if (!img.parentNode) {
+          return;
+        }
+        img.parentNode.insertBefore(selectedImage, img);
+        img.parentNode.removeChild(img);
+        setCaretAfterNode(selectedImage);
+      });
+    } else {
+      insertImageAtSelection(img);
+      undoStack.push(() => {
+        if (img.parentNode) {
+          img.parentNode.removeChild(img);
+        }
+      });
+    }
+
+    lastComplexExpression = latexExpression;
     if (prefs.log && logs.length) {
       showLogPanel(logs.join("\n"));
     }
@@ -463,6 +631,8 @@ browser.runtime.onMessage.addListener((message) => {
       });
     case "getSelection":
       return Promise.resolve(getSelectionText());
+    case "getInsertComplexSeed":
+      return Promise.resolve(getInsertComplexSeed());
     case "hasLogReport":
       return Promise.resolve(Boolean(document.getElementById(LOG_PANEL_ID)));
     case "removeLogReport": {
@@ -470,6 +640,8 @@ browser.runtime.onMessage.addListener((message) => {
       removeLogPanel();
       return Promise.resolve({ ok: true, removed: hadReport });
     }
+    case "confirmSendWithLatexCheck":
+      return Promise.resolve(confirmSendWithLatexCheck());
     default:
       return null;
   }
