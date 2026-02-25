@@ -2,6 +2,11 @@
   box-sizing: border-box;
 }
 
+html,
+body {
+  height: 100%;
+}
+
 body {
   margin: 0;
   font: 14px/1.4 sans-serif;
@@ -10,13 +15,29 @@ body {
 }
 
 main {
-  max-width: 960px;
+  max-width: 1000px;
   margin: 0 auto;
-  padding: 20px;
+  padding: 12px 16px;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
 }
 
 h1 {
   margin-top: 0;
+  margin-bottom: 2px;
+}
+
+.dialog-content {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  padding-right: 2px;
 }
 
 textarea,
@@ -31,20 +52,22 @@ select {
 
 textarea {
   resize: vertical;
+  min-height: 220px;
+  flex: 1 1 auto;
 }
 
 .history {
-  margin: 12px 0;
+  margin: 0;
 }
 
 #formulaHistory {
-  min-height: 8.5em;
+  min-height: 6.5em;
 }
 
 .row {
   display: grid;
   gap: 12px;
-  margin-top: 12px;
+  margin-top: 0;
 }
 
 .checkbox {
@@ -56,7 +79,20 @@ textarea {
 .actions {
   display: flex;
   gap: 10px;
-  margin-top: 12px;
+  margin-top: 0;
+  flex-wrap: wrap;
+}
+
+.compact-actions {
+  justify-content: flex-start;
+}
+
+.footer-actions {
+  justify-content: flex-end;
+  align-items: center;
+  border-top: 1px solid #ddd;
+  padding-top: 8px;
+  flex-wrap: nowrap;
 }
 
 button {
@@ -79,6 +115,12 @@ button {
   background: #666;
 }
 
+#cancel {
+  border-color: #666;
+  background: #666;
+}
+
 #status {
   min-height: 1.4em;
+  margin: 0;
 }

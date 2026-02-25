@@ -30,6 +30,18 @@ const MENU_IDS = Object.freeze({
   INSERT: "tblatex-insert-complex",
   OPTIONS: "tblatex-open-options",
 });
+const INSERT_DIALOG_DEFAULT_SIZE = Object.freeze({
+  width: 900,
+  height: 700,
+});
+const INSERT_DIALOG_MIN_SIZE = Object.freeze({
+  width: 720,
+  height: 560,
+});
+const INSERT_DIALOG_MAX_SIZE = Object.freeze({
+  width: 2200,
+  height: 1800,
+});
 
 let composeScriptRegistration = null;
 const latexifyInFlightByTab = new Map();
@@ -78,6 +90,14 @@ function normalizeRenderScale(value) {
     return DEFAULT_PREFS.renderScale;
   }
   return Math.min(8, Math.max(1, parsed));
+}
+
+function normalizeDialogDimension(value, minValue, maxValue, defaultValue) {
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isFinite(parsed)) {
+    return defaultValue;
+  }
+  return Math.min(maxValue, Math.max(minValue, parsed));
 }
 
 function normalizeFormulaHistoryString(value) {
@@ -557,13 +577,51 @@ async function runUndoAll(tabId) {
 }
 
 async function openInsertDialog(tabId) {
+  const { insertDialogSize = {} } = await browser.storage.local.get("insertDialogSize");
+  const width = normalizeDialogDimension(
+    insertDialogSize.width,
+    INSERT_DIALOG_MIN_SIZE.width,
+    INSERT_DIALOG_MAX_SIZE.width,
+    INSERT_DIALOG_DEFAULT_SIZE.width
+  );
+  const height = normalizeDialogDimension(
+    insertDialogSize.height,
+    INSERT_DIALOG_MIN_SIZE.height,
+    INSERT_DIALOG_MAX_SIZE.height,
+    INSERT_DIALOG_DEFAULT_SIZE.height
+  );
+
   const url = browser.runtime.getURL(`ui/insert.html?tabId=${encodeURIComponent(tabId)}`);
   await browser.windows.create({
     url,
     type: "popup",
-    width: 900,
-    height: 700,
+    width,
+    height,
   });
+}
+
+async function saveInsertDialogSize(payload) {
+  if (!payload || typeof payload !== "object") {
+    return { ok: false };
+  }
+
+  const width = normalizeDialogDimension(
+    payload.width,
+    INSERT_DIALOG_MIN_SIZE.width,
+    INSERT_DIALOG_MAX_SIZE.width,
+    INSERT_DIALOG_DEFAULT_SIZE.width
+  );
+  const height = normalizeDialogDimension(
+    payload.height,
+    INSERT_DIALOG_MIN_SIZE.height,
+    INSERT_DIALOG_MAX_SIZE.height,
+    INSERT_DIALOG_DEFAULT_SIZE.height
+  );
+
+  await browser.storage.local.set({
+    insertDialogSize: { width, height },
+  });
+  return { ok: true, width, height };
 }
 
 async function withActiveComposeTab(handler) {
@@ -656,6 +714,8 @@ async function handleRuntimeMessage(message, sender) {
       return getFormulaHistoryStore();
     case "setFormulaHistoryStore":
       return setFormulaHistoryStore(message.history || []);
+    case "saveInsertDialogSize":
+      return saveInsertDialogSize(message);
     case "openOptions":
       return browser.runtime.openOptionsPage();
     case "runLatexifyFromDialog":

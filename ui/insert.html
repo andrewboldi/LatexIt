@@ -9,39 +9,45 @@
   <body>
     <main>
       <h1>Insert Complex LaTeX</h1>
-      <p>
-        Edit the LaTeX document below. The visible result will be inserted at the
-        current cursor position in the compose editor.
-      </p>
-      <p>
-        If a LaTeX image is selected in the compose body, this dialog edits and
-        replaces that formula in place.
-      </p>
+      <section class="dialog-content">
+        <p>
+          Edit the LaTeX document below. The visible result will be inserted at the
+          current cursor position in the compose editor.
+        </p>
+        <p>
+          If a LaTeX image is selected in the compose body, this dialog edits and
+          replaces that formula in place.
+        </p>
 
-      <section class="history">
-        <label for="formulaHistory">Recent formulas in this compose window</label>
-        <select id="formulaHistory" size="6"></select>
-        <section class="actions">
-          <button id="loadHistory" type="button" disabled>Load selected formula</button>
-          <button id="refreshHistory" type="button">Refresh history</button>
+        <section class="history" id="historySection">
+          <label for="formulaHistory">Recent formulas in this compose window</label>
+          <select id="formulaHistory" size="4"></select>
+          <section class="actions compact-actions">
+            <button id="loadHistory" type="button" disabled>Load selected formula</button>
+            <button id="refreshHistory" type="button">Refresh history</button>
+          </section>
+        </section>
+
+        <textarea id="latexExpression" rows="14"></textarea>
+
+        <section class="actions compact-actions">
+          <button id="resetTemplate" type="button">Load default template</button>
+        </section>
+
+        <section class="row">
+          <label class="checkbox">
+            <input id="autodpi" type="checkbox" />
+            Adapt image resolution automatically to font size
+          </label>
+          <label>
+            Font size
+            <input id="fontPx" type="number" min="1" step="1" />
+          </label>
         </section>
       </section>
 
-      <textarea id="latexExpression" rows="20"></textarea>
-
-      <section class="row">
-        <label class="checkbox">
-          <input id="autodpi" type="checkbox" />
-          Adapt image resolution automatically to font size
-        </label>
-        <label>
-          Font size
-          <input id="fontPx" type="number" min="1" step="1" />
-        </label>
-      </section>
-
-      <section class="actions">
-        <button id="resetTemplate" type="button">Load default template</button>
+      <section class="actions footer-actions">
+        <button id="cancel" type="button">Cancel</button>
         <button id="insert" type="button">Insert at cursor position</button>
       </section>
 

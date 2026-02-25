@@ -6,6 +6,7 @@ const oldMarker = "__REPLACEME__";
 let prefs = null;
 let tabId = null;
 let formulaHistory = [];
+let saveDialogSizeTimer = null;
 
 function setStatus(message) {
   document.getElementById("status").textContent = message;
@@ -144,6 +145,7 @@ function formatHistoryItem(item) {
 function renderFormulaHistory() {
   const list = document.getElementById("formulaHistory");
   const loadButton = document.getElementById("loadHistory");
+  const historySection = document.getElementById("historySection");
 
   while (list.firstChild) {
     list.removeChild(list.firstChild);
@@ -159,6 +161,7 @@ function renderFormulaHistory() {
   const hasItems = formulaHistory.length > 0;
   list.disabled = !hasItems;
   loadButton.disabled = !hasItems;
+  historySection.hidden = !hasItems;
   if (hasItems) {
     list.selectedIndex = 0;
   }
@@ -283,10 +286,40 @@ async function insertExpression() {
   }
 }
 
+async function saveCurrentDialogSize() {
+  try {
+    const currentWindow = await browser.windows.getCurrent();
+    if (!currentWindow) {
+      return;
+    }
+    await browser.runtime.sendMessage({
+      command: "saveInsertDialogSize",
+      width: currentWindow.width,
+      height: currentWindow.height,
+    });
+  } catch (error) {
+    // Non-fatal in case the window API is unavailable.
+  }
+}
+
+function scheduleDialogSizeSave() {
+  if (saveDialogSizeTimer !== null) {
+    clearTimeout(saveDialogSizeTimer);
+  }
+  saveDialogSizeTimer = setTimeout(() => {
+    saveDialogSizeTimer = null;
+    saveCurrentDialogSize().catch(() => {});
+  }, 350);
+}
+
 document.getElementById("insert").addEventListener("click", () => {
   insertExpression().catch((error) => {
     setStatus(`Insert failed: ${String(error)}`);
   });
+});
+
+document.getElementById("cancel").addEventListener("click", () => {
+  window.close();
 });
 
 document.getElementById("resetTemplate").addEventListener("click", () => {
@@ -311,6 +344,18 @@ document.getElementById("formulaHistory").addEventListener("dblclick", () => {
 
 document.getElementById("autodpi").addEventListener("change", () => {
   updateAutodpiUi();
+});
+
+window.addEventListener("resize", () => {
+  scheduleDialogSizeSave();
+});
+
+window.addEventListener("beforeunload", () => {
+  if (saveDialogSizeTimer !== null) {
+    clearTimeout(saveDialogSizeTimer);
+    saveDialogSizeTimer = null;
+  }
+  saveCurrentDialogSize().catch(() => {});
 });
 
 load()
