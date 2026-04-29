@@ -1,5 +1,9 @@
 "use strict";
 
+const { Subprocess } = ChromeUtils.importESModule(
+  "resource://gre/modules/Subprocess.sys.mjs"
+);
+
 const Cc = Components.classes;
 const Ci = Components.interfaces;
 const DEFAULT_RENDER_SCALE = 4;
@@ -76,6 +80,21 @@ function runProcess(binaryFile, args) {
       settle(reject, error);
     }
   });
+}
+
+async function runProcessCapture(binaryPath, args) {
+  const proc = await Subprocess.call({
+    command: binaryPath,
+    arguments: args,
+    stderr: "pipe",
+  });
+  let stdout = "";
+  let chunk;
+  while ((chunk = await proc.stdout.readString()) !== "") {
+    stdout += chunk;
+  }
+  const { exitCode } = await proc.wait();
+  return { exitCode, stdout };
 }
 
 function writeUtf8TextFile(file, data) {
@@ -164,6 +183,11 @@ function bytesToBase64(bytes) {
   }
 
   return output;
+}
+
+function parseDvipngDepth(text) {
+  const match = text.match(/\[\d+ depth=(-?\d+)\]/);
+  return match ? Number(match[1]) : 0;
 }
 
 function removeFile(file) {
@@ -459,21 +483,17 @@ var TBLatex = class extends ExtensionCommon.ExtensionAPI {
             }
 
             const dvipngArgs = [
-              "-T",
-              "tight",
-              "-z",
-              "3",
-              "-bg",
-              "Transparent",
-              "-D",
-              String(dpi),
-              "-fg",
-              safeColor,
-              "-o",
-              files.pngFile.path,
+              "--depth",
+              "-T", "tight",
+              "-z", "3",
+              "-bg", "Transparent",
+              "-D", String(dpi),
+              "-fg", safeColor,
+              "-o", files.pngFile.path,
               files.dviFile.path,
             ];
-            const dvipngExit = await runProcess(dvipngBin, dvipngArgs);
+            const dvipngResult = await runProcessCapture(dvipngBin.path, dvipngArgs);
+            const dvipngExit = dvipngResult.exitCode;
             if (dvipngExit !== 0 || !files.pngFile.exists()) {
               return {
                 status: 2,
@@ -496,13 +516,20 @@ var TBLatex = class extends ExtensionCommon.ExtensionAPI {
                   "!!! Direct renderer produced invalid PNG bytes. Rendering aborted.\n",
               };
             }
+            const depthText = dvipngResult.stdout || "";
+            const depth = parseDvipngDepth(depthText);
+            if (debug) {
+              log += `*** dvipng output: ${depthText.trim()}\n`;
+              log += `*** Parsed depth: ${depth}px\n`;
+            }
+
             const pngBytes = readFileBytes(files.pngFile);
             const base64Png = bytesToBase64(pngBytes);
             const dataUrl = `data:image/png;base64,${base64Png}`;
 
             return {
               status,
-              depth: 0,
+              depth,
               dataUrl,
               renderScale: normalizedRenderScale,
               log,

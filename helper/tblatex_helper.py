@@ -211,6 +211,12 @@ def render(payload: dict[str, Any]) -> dict[str, Any]:
                 ),
             }
 
+        depth = 0
+        if dvipng_result.stdout:
+            depth_match = re.search(r"\[\d+ depth=(-?\d+)\]", dvipng_result.stdout)
+            if depth_match:
+                depth = int(depth_match.group(1))
+
         with open(png_file, "rb") as handle:
             encoded = base64.b64encode(handle.read()).decode("ascii")
 
@@ -224,10 +230,12 @@ def render(payload: dict[str, Any]) -> dict[str, Any]:
                 f"*** helper dpi: {dpi} (base={base_dpi}, scale={render_scale}x)"
             )
             log_lines.append(f"*** helper font color: {font_color}")
+            log_lines.append(f"*** helper dvipng output: {dvipng_result.stdout.strip()}")
+            log_lines.append(f"*** helper parsed depth: {depth}px")
 
         return {
             "status": status,
-            "depth": 0,
+            "depth": depth,
             "dataUrl": f"data:image/png;base64,{encoded}",
             "renderScale": render_scale,
             "log": ("\n".join(log_lines) + "\n") if log_lines else "",

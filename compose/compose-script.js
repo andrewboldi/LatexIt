@@ -450,10 +450,12 @@ function makeImageFromResult(result, altText, titleText, options = {}) {
     ? Number(result.renderScale)
     : 1;
   const depth = Number(result && result.depth) || 0;
+  const sourceExpr = (options.sourceExpression || altText || "").trim();
+  const isDisplayMath = sourceExpr.startsWith("$$") || sourceExpr.startsWith("\\[");
   const img = document.createElement("img");
   img.alt = altText;
   img.title = titleText;
-  img.style.verticalAlign = `-${depth / renderScale}px`;
+  img.style.verticalAlign = isDisplayMath ? "middle" : `-${depth / renderScale}px`;
   img.src = result.dataUrl;
   applyFormulaMetadata(img, options);
 
@@ -462,8 +464,12 @@ function makeImageFromResult(result, altText, titleText, options = {}) {
       if (!img.naturalWidth || !img.naturalHeight) {
         return;
       }
-      img.width = Math.max(1, Math.round(img.naturalWidth / renderScale));
-      img.height = Math.max(1, Math.round(img.naturalHeight / renderScale));
+      const w = Math.max(1, Math.round(img.naturalWidth / renderScale));
+      const h = Math.max(1, Math.round(img.naturalHeight / renderScale));
+      img.width = w;
+      img.height = h;
+      img.style.width = `${w}px`;
+      img.style.height = `${h}px`;
     };
 
     if (img.complete) {
