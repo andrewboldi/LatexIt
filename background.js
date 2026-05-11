@@ -43,7 +43,6 @@ const INSERT_DIALOG_MAX_SIZE = Object.freeze({
   height: 1800,
 });
 
-let composeScriptRegistration = null;
 const latexifyInFlightByTab = new Map();
 const FORMULA_HISTORY_LIMIT = 50;
 let helperHealthCache = {
@@ -368,10 +367,6 @@ async function renderLatexMessage(message) {
     prefs = await detectAndStorePaths(false);
   }
 
-  const runtimeInfo = await browser.TBLatex.getRuntimeInfo().catch(() => ({
-    sandboxed: false,
-    sandboxType: "none",
-  }));
   const autodpi =
     typeof message.autodpiOverride === "boolean"
       ? message.autodpiOverride
@@ -424,7 +419,7 @@ async function renderLatexMessage(message) {
 
   try {
     const helperResult = await renderViaHelper(message, prefs, autodpi, fontPx);
-    const helperLog = `*** Used local helper fallback (${health.url}) in ${runtimeInfo.sandboxType} sandbox mode.\n`;
+    const helperLog = `*** Used local helper fallback (${health.url}).\n`;
     return {
       ...helperResult,
       log: `${helperLog}${helperResult.log || ""}`,
@@ -440,17 +435,6 @@ async function renderLatexMessage(message) {
   }
 }
 
-async function ensureComposeScriptRegistered() {
-  if (composeScriptRegistration) {
-    return composeScriptRegistration;
-  }
-
-  composeScriptRegistration = browser.composeScripts.register({
-    js: [{ file: "compose/compose-script.js" }],
-  });
-  return composeScriptRegistration;
-}
-
 async function isHtmlComposeTab(tabId) {
   try {
     const details = await browser.compose.getComposeDetails(tabId);
@@ -461,7 +445,6 @@ async function isHtmlComposeTab(tabId) {
 }
 
 async function sendComposeCommand(tabId, payload) {
-  await ensureComposeScriptRegistered();
   return browser.tabs.sendMessage(tabId, payload);
 }
 
@@ -734,7 +717,6 @@ async function initialize() {
   await ensurePrefs();
   await migrateLegacyPrefs();
   await detectAndStorePaths(false);
-  await ensureComposeScriptRegistered();
   await setupComposeActionMenu();
 }
 
