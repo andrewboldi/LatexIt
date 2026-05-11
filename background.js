@@ -406,7 +406,7 @@ async function renderLatexMessage(message) {
   }
 
   const directSucceeded = directResult && (directResult.status === 0 || directResult.status === 1);
-  const fallbackEnabled = prefs.helperFallbackEnabled && runtimeInfo && runtimeInfo.sandboxed;
+  const fallbackEnabled = prefs.helperFallbackEnabled;
   if (directSucceeded || !fallbackEnabled) {
     return directResult;
   }
