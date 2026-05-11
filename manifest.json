@@ -9,7 +9,7 @@
     "gecko": {
       "id": "tblatex@andrewboldi.dev",
       "strict_min_version": "140.0",
-      "strict_max_version": "140.*"
+      "strict_max_version": "999.*"
     }
   },
   "permissions": [
@@ -26,6 +26,11 @@
       "background.js"
     ]
   },
+  "compose_scripts": [
+    {
+      "js": ["compose/compose-script.js"]
+    }
+  ],
   "compose_action": {
     "default_title": "LaTeX It!",
     "default_icon": "icon.png",
