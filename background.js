@@ -43,6 +43,7 @@ const INSERT_DIALOG_MAX_SIZE = Object.freeze({
   height: 1800,
 });
 
+let composeScriptRegistration = null;
 const latexifyInFlightByTab = new Map();
 const FORMULA_HISTORY_LIMIT = 50;
 let helperHealthCache = {
@@ -444,7 +445,21 @@ async function isHtmlComposeTab(tabId) {
   }
 }
 
+async function ensureComposeScriptRegistered() {
+  if (composeScriptRegistration) {
+    return;
+  }
+  try {
+    composeScriptRegistration = await browser.composeScripts.register({
+      js: [{ file: "compose/compose-script.js" }],
+    });
+  } catch (error) {
+    // compose_scripts manifest key handles injection on newer TB versions
+  }
+}
+
 async function sendComposeCommand(tabId, payload) {
+  await ensureComposeScriptRegistered();
   return browser.tabs.sendMessage(tabId, payload);
 }
 
@@ -717,6 +732,7 @@ async function initialize() {
   await ensurePrefs();
   await migrateLegacyPrefs();
   await detectAndStorePaths(false);
+  await ensureComposeScriptRegistered();
   await setupComposeActionMenu();
 }
 
