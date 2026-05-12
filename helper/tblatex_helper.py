@@ -83,6 +83,26 @@ def run_command(args: list[str]) -> subprocess.CompletedProcess[str]:
     )
 
 
+def read_latex_log_errors(log_file_path):
+    if not os.path.exists(log_file_path):
+        return ""
+    try:
+        with open(log_file_path, "r", encoding="utf-8", errors="replace") as f:
+            lines = f.readlines()
+        error_lines = []
+        i = 0
+        while i < len(lines):
+            if lines[i].startswith("!"):
+                for j in range(i, min(i + 3, len(lines))):
+                    error_lines.append(lines[j].rstrip())
+                i += 3
+            else:
+                i += 1
+        return "\n".join(error_lines)
+    except Exception:
+        return ""
+
+
 def render(payload: dict[str, Any]) -> dict[str, Any]:
     latex_expression = payload.get("latexExpression", "")
     if not isinstance(latex_expression, str):
@@ -172,6 +192,9 @@ def render(payload: dict[str, Any]) -> dict[str, Any]:
             )
 
         if not os.path.exists(dvi_file):
+            log_file = os.path.join(temp_dir, "tblatex.log")
+            latex_errors = read_latex_log_errors(log_file)
+            error_detail = f"\n{latex_errors}" if latex_errors else ""
             return {
                 "status": 2,
                 "depth": 0,
@@ -179,6 +202,7 @@ def render(payload: dict[str, Any]) -> dict[str, Any]:
                 "log": (
                     "\n".join(log_lines)
                     + "\n!!! LaTeX did not output a .dvi file, something went wrong.\n"
+                    + error_detail
                 ),
             }
 

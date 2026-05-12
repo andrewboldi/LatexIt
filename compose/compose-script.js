@@ -4,12 +4,16 @@ const LOG_PANEL_ID = "tblatex-log";
 const LATEX_PATTERN = /\$\$[^\$]+\$\$|\$[^\$]+\$|\\\[[\s\S]*?\\\]|\\\([\s\S]*?\\\)/g;
 const INLINE_LATEX_EXACT_PATTERN = /^(?:\$\$[^\$]+\$\$|\$[^\$]+\$|\\\[[\s\S]*\\\]|\\\([\s\S]*\\\))$/;
 const FORMULA_HISTORY_LIMIT = 50;
+const PREVIEW_TOOLTIP_ID = "tblatex-preview-tooltip";
 
 let undoStack = [];
 let lastComplexExpression = "";
 let formulaHistory = [];
 let formulaHistoryHydrated = false;
 let formulaHistorySyncTimer = null;
+let composePreviewTimer = null;
+let composePreviewGeneration = 0;
+let lastComposePreviewExpr = "";
 
 function insertAfter(nodeToInsert, referenceNode) {
   const parentNode = referenceNode.parentNode;
@@ -51,6 +55,7 @@ function splitTextNodes(node) {
   if (
     node.nodeType !== Node.ELEMENT_NODE ||
     node.id === LOG_PANEL_ID ||
+    node.id === PREVIEW_TOOLTIP_ID ||
     node.tagName === "SCRIPT" ||
     node.tagName === "STYLE" ||
     node.tagName === "IMG"
@@ -692,6 +697,8 @@ function collectUnconvertedLatex(limit = 3) {
     if (
       parent.id === LOG_PANEL_ID ||
       parent.closest(`#${LOG_PANEL_ID}`) ||
+      parent.id === PREVIEW_TOOLTIP_ID ||
+      parent.closest(`#${PREVIEW_TOOLTIP_ID}`) ||
       parent.tagName === "SCRIPT" ||
       parent.tagName === "STYLE"
     ) {
@@ -743,8 +750,10 @@ async function latexify({ silent }) {
   const logs = [];
   let converted = 0;
   let failed = 0;
+  let diagnosticCount = 0;
 
   removeLogPanel();
+  removePreviewTooltip();
 
   const latexNodes = splitTextNodes(document.body);
   if (!latexNodes.length && !silent) {
@@ -777,6 +786,12 @@ async function latexify({ silent }) {
     if (renderResult.log) {
       logs.push(renderResult.log);
     }
+    if (renderResult.diagnostics && renderResult.diagnostics.length) {
+      diagnosticCount += renderResult.diagnostics.length;
+      for (const d of renderResult.diagnostics) {
+        logs.push(`  → ${d.message}`);
+      }
+    }
 
     if ((renderResult.status === 0 || renderResult.status === 1) && renderResult.dataUrl) {
       const formulaSeed = {
@@ -807,7 +822,7 @@ async function latexify({ silent }) {
     }
   }
 
-  if (prefs.log && logs.length) {
+  if ((prefs.log || diagnosticCount > 0) && logs.length) {
     showLogPanel(logs.join("\n"));
   }
 
@@ -939,6 +954,194 @@ function getSelectionText() {
   return selection.toString();
 }
 
+function getLatexAtCaret() {
+  const sel = window.getSelection();
+  if (!sel || sel.rangeCount === 0 || !sel.isCollapsed) return null;
+  const node = sel.anchorNode;
+  if (!node || node.nodeType !== Node.TEXT_NODE) return null;
+  const text = node.nodeValue || "";
+  const cursor = sel.anchorOffset;
+  if (!text.includes("$")) return null;
+
+  const re = /\$\$[^\$]+\$\$|\$[^\$]+\$/g;
+  let match;
+  while ((match = re.exec(text)) !== null) {
+    if (cursor >= match.index && cursor <= match.index + match[0].length) {
+      return { expression: match[0], complete: true };
+    }
+  }
+
+  let openIdx = -1;
+  let isDouble = false;
+  for (let i = cursor - 1; i >= 0; i--) {
+    if (text[i] === "$") {
+      if (i > 0 && text[i - 1] === "$") {
+        openIdx = i - 1;
+        isDouble = true;
+      } else {
+        openIdx = i;
+      }
+      break;
+    }
+  }
+  if (openIdx < 0) return null;
+
+  const afterOpen = openIdx + (isDouble ? 2 : 1);
+  const between = text.slice(afterOpen, cursor);
+  if (between.includes("$")) return null;
+  const inner = between.trim();
+  if (!inner) return null;
+
+  const delim = isDouble ? "$$" : "$";
+  return { expression: `${delim}${inner}${delim}`, complete: false };
+}
+
+function removePreviewTooltip() {
+  const el = document.getElementById(PREVIEW_TOOLTIP_ID);
+  if (el && el.parentNode) el.parentNode.removeChild(el);
+  lastComposePreviewExpr = "";
+}
+
+function positionTooltip(tooltip) {
+  const sel = window.getSelection();
+  if (!sel || sel.rangeCount === 0) return;
+  const range = sel.getRangeAt(0).cloneRange();
+  range.collapse(true);
+  const rect = range.getBoundingClientRect();
+  if (!rect.height) return;
+
+  document.body.appendChild(tooltip);
+  const tipRect = tooltip.getBoundingClientRect();
+  const scrollY = window.pageYOffset || document.documentElement.scrollTop;
+  const scrollX = window.pageXOffset || document.documentElement.scrollLeft;
+  let top = rect.top + scrollY - tipRect.height - 8;
+  if (top < scrollY) top = rect.bottom + scrollY + 8;
+  const left = rect.left + scrollX;
+  tooltip.style.position = "absolute";
+  tooltip.style.top = `${top}px`;
+  tooltip.style.left = `${left}px`;
+}
+
+function showPreviewTooltip(dataUrl, renderScale) {
+  removePreviewTooltip();
+  const tooltip = document.createElement("div");
+  tooltip.id = PREVIEW_TOOLTIP_ID;
+  tooltip.style.cssText =
+    "background:#fff;border:1px solid #ccc;border-radius:6px;" +
+    "box-shadow:0 2px 8px rgba(0,0,0,.15);padding:8px 12px;" +
+    "z-index:999999;pointer-events:none;max-width:600px;";
+  const img = document.createElement("img");
+  img.src = dataUrl;
+  img.alt = "Preview";
+  if (renderScale > 1) {
+    img.addEventListener("load", () => {
+      img.style.width = `${Math.max(1, Math.round(img.naturalWidth / renderScale))}px`;
+      img.style.height = `${Math.max(1, Math.round(img.naturalHeight / renderScale))}px`;
+    }, { once: true });
+  }
+  tooltip.appendChild(img);
+  positionTooltip(tooltip);
+}
+
+function showPreviewError(message) {
+  removePreviewTooltip();
+  const tooltip = document.createElement("div");
+  tooltip.id = PREVIEW_TOOLTIP_ID;
+  tooltip.style.cssText =
+    "background:#fff3f3;border:1px solid #e88;border-radius:6px;" +
+    "box-shadow:0 2px 8px rgba(0,0,0,.15);padding:8px 12px;" +
+    "z-index:999999;pointer-events:none;color:#c00;font-size:13px;" +
+    "max-width:400px;font-family:sans-serif;";
+  tooltip.textContent = message;
+  positionTooltip(tooltip);
+}
+
+function scheduleComposePreview() {
+  if (composePreviewTimer !== null) clearTimeout(composePreviewTimer);
+  composePreviewTimer = setTimeout(() => {
+    composePreviewTimer = null;
+    updateComposePreview().catch(() => {});
+  }, 800);
+}
+
+async function updateComposePreview() {
+  const info = getLatexAtCaret();
+  if (!info) { removePreviewTooltip(); return; }
+  if (info.expression === lastComposePreviewExpr) return;
+  lastComposePreviewExpr = info.expression;
+
+  const generation = ++composePreviewGeneration;
+  const currentPrefs = await getPrefs();
+  const [latexDocument, replaceLog] = replaceMarker(currentPrefs.template, info.expression);
+  if (replaceLog || !latexDocument) return;
+
+  const element = getCaretElement();
+  const style = window.getComputedStyle(element);
+  const fontPx = style.getPropertyValue("font-size") || `${currentPrefs.fontPx}px`;
+  const fontColor = normalizeColor(style.getPropertyValue("color"));
+
+  try {
+    const result = await runLatexRender(latexDocument, fontPx, fontColor);
+    if (generation !== composePreviewGeneration) return;
+    if (result && (result.status === 0 || result.status === 1) && result.dataUrl) {
+      showPreviewTooltip(result.dataUrl, result.renderScale || 1);
+    } else if (result && result.diagnostics && result.diagnostics.length) {
+      showPreviewError(result.diagnostics.map((d) => d.message).join("\n"));
+    } else {
+      removePreviewTooltip();
+    }
+  } catch (error) {
+    if (generation === composePreviewGeneration) removePreviewTooltip();
+  }
+}
+
+function handleComposePreviewCheck() {
+  const info = getLatexAtCaret();
+  if (info) {
+    scheduleComposePreview();
+  } else {
+    if (composePreviewTimer !== null) {
+      clearTimeout(composePreviewTimer);
+      composePreviewTimer = null;
+    }
+    removePreviewTooltip();
+  }
+}
+
+document.addEventListener("paste", (event) => {
+  const text = event.clipboardData && event.clipboardData.getData("text/plain");
+  if (!text) return;
+
+  const matches = text.match(LATEX_PATTERN);
+  if (!matches || !matches.length) return;
+
+  const likelyLatex = matches.filter((m) => {
+    if (m.startsWith("$$") || m.startsWith("\\[") || m.startsWith("\\(")) return true;
+    return /[\\{}_^]/.test(m.slice(1, -1));
+  });
+  if (!likelyLatex.length) return;
+
+  const count = likelyLatex.length;
+  const noun = count === 1 ? "expression" : "expressions";
+  const samples = likelyLatex
+    .slice(0, 3)
+    .map((m) => normalizeLatexSnippet(m))
+    .filter(Boolean);
+  const sampleText = samples.length ? `\n\n${samples.join("\n")}` : "";
+
+  setTimeout(() => {
+    const shouldRender = window.confirm(
+      `LaTeX It! detected ${count} LaTeX ${noun} in pasted text:${sampleText}\n\nRender them now?`
+    );
+    if (shouldRender) {
+      latexify({ silent: true }).catch(() => {});
+    }
+  }, 100);
+});
+
+document.addEventListener("selectionchange", handleComposePreviewCheck);
+window.addEventListener("blur", removePreviewTooltip);
+
 browser.runtime.onMessage.addListener((message) => {
   switch (message && message.command) {
     case "latexify":
@@ -964,6 +1167,7 @@ browser.runtime.onMessage.addListener((message) => {
     case "removeLogReport": {
       const hadReport = Boolean(document.getElementById(LOG_PANEL_ID));
       removeLogPanel();
+      removePreviewTooltip();
       return Promise.resolve({ ok: true, removed: hadReport });
     }
     case "confirmSendWithLatexCheck":

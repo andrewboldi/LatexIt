@@ -7,6 +7,8 @@ let prefs = null;
 let tabId = null;
 let formulaHistory = [];
 let saveDialogSizeTimer = null;
+let previewTimer = null;
+let previewGeneration = 0;
 
 function setStatus(message) {
   document.getElementById("status").textContent = message;
@@ -345,6 +347,140 @@ document.getElementById("formulaHistory").addEventListener("dblclick", () => {
 document.getElementById("autodpi").addEventListener("change", () => {
   updateAutodpiUi();
 });
+
+const BRACKET_PAIRS = { "(": ")", "{": "}", "[": "]" };
+const CLOSING_BRACKETS = new Set(Object.values(BRACKET_PAIRS));
+
+function handleBracketAutoClose(event) {
+  if (CLOSING_BRACKETS.has(event.key)) {
+    const textarea = event.target;
+    const pos = textarea.selectionStart;
+    if (pos === textarea.selectionEnd && textarea.value[pos] === event.key) {
+      event.preventDefault();
+      textarea.selectionStart = pos + 1;
+      textarea.selectionEnd = pos + 1;
+      return;
+    }
+  }
+
+  const closing = BRACKET_PAIRS[event.key];
+  if (!closing) return;
+
+  const textarea = event.target;
+  event.preventDefault();
+  const start = textarea.selectionStart;
+  const end = textarea.selectionEnd;
+  const value = textarea.value;
+  const selected = value.slice(start, end);
+
+  textarea.value =
+    value.slice(0, start) + event.key + selected + closing + value.slice(end);
+  textarea.selectionStart = start + 1;
+  textarea.selectionEnd = start + 1 + selected.length;
+  schedulePreview();
+}
+
+function schedulePreview() {
+  if (previewTimer !== null) {
+    clearTimeout(previewTimer);
+  }
+  previewTimer = setTimeout(() => {
+    previewTimer = null;
+    updatePreview().catch(() => {});
+  }, 800);
+}
+
+async function updatePreview() {
+  const expression = document.getElementById("latexExpression").value;
+  const output = document.getElementById("previewOutput");
+
+  if (
+    !expression.trim() ||
+    expression.includes("__REPLACE_ME__") ||
+    expression.includes("__REPLACEME__")
+  ) {
+    output.innerHTML = "";
+    const placeholder = document.createElement("span");
+    placeholder.className = "preview-placeholder";
+    placeholder.textContent = "Type LaTeX to see a live preview";
+    output.appendChild(placeholder);
+    return;
+  }
+
+  const generation = ++previewGeneration;
+  output.innerHTML = "";
+  const rendering = document.createElement("span");
+  rendering.className = "preview-placeholder";
+  rendering.textContent = "Rendering...";
+  output.appendChild(rendering);
+
+  try {
+    const autodpi = document.getElementById("autodpi").checked;
+    const fontPx = Number(document.getElementById("fontPx").value) || 16;
+
+    const result = await browser.runtime.sendMessage({
+      command: "renderLatex",
+      latexExpression: expression,
+      fontPx: `${fontPx}px`,
+      fontColor: "RGB 0 0 0",
+      autodpiOverride: autodpi,
+      defaultFontPxOverride: fontPx,
+    });
+
+    if (generation !== previewGeneration) return;
+
+    output.innerHTML = "";
+    if (
+      result &&
+      (result.status === 0 || result.status === 1) &&
+      result.dataUrl
+    ) {
+      const img = document.createElement("img");
+      img.src = result.dataUrl;
+      img.alt = "Preview";
+      if (result.renderScale > 1) {
+        img.addEventListener(
+          "load",
+          () => {
+            const w = Math.max(
+              1,
+              Math.round(img.naturalWidth / result.renderScale)
+            );
+            const h = Math.max(
+              1,
+              Math.round(img.naturalHeight / result.renderScale)
+            );
+            img.style.width = `${w}px`;
+            img.style.height = `${h}px`;
+          },
+          { once: true }
+        );
+      }
+      output.appendChild(img);
+    } else {
+      const errorSpan = document.createElement("span");
+      errorSpan.className = "preview-error";
+      if (result && result.diagnostics && result.diagnostics.length) {
+        errorSpan.textContent = result.diagnostics
+          .map((d) => d.message)
+          .join("\n");
+      } else {
+        errorSpan.textContent = "Rendering failed.";
+      }
+      output.appendChild(errorSpan);
+    }
+  } catch (error) {
+    if (generation !== previewGeneration) return;
+    output.innerHTML = "";
+    const errorSpan = document.createElement("span");
+    errorSpan.className = "preview-error";
+    errorSpan.textContent = String(error);
+    output.appendChild(errorSpan);
+  }
+}
+
+document.getElementById("latexExpression").addEventListener("input", schedulePreview);
+document.getElementById("latexExpression").addEventListener("keydown", handleBracketAutoClose);
 
 window.addEventListener("resize", () => {
   scheduleDialogSizeSave();

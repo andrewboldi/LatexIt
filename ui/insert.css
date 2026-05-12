@@ -124,3 +124,37 @@ button {
   min-height: 1.4em;
   margin: 0;
 }
+
+.preview-container {
+  margin-top: 4px;
+  flex-shrink: 0;
+}
+
+.preview-container label {
+  font-weight: bold;
+  font-size: 13px;
+  color: #555;
+}
+
+.preview-output {
+  min-height: 60px;
+  border: 1px solid #bcbcc4;
+  border-radius: 6px;
+  padding: 12px;
+  background: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.preview-placeholder {
+  color: #999;
+  font-style: italic;
+}
+
+.preview-error {
+  color: #c00;
+  font-size: 13px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}

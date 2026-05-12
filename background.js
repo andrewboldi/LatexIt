@@ -10,9 +10,11 @@ const DEFAULT_PREFS = {
   renderScale: 4,
   log: false,
   debug: false,
+  autoRenderOnSend: true,
   warnOnUnconvertedLatex: true,
   persistFormulaHistory: false,
   keepTempFiles: false,
+  darkModeCompat: true,
   template:
     "\\documentclass{article}\n" +
     "\\usepackage[utf8]{inputenc}\n" +
@@ -25,6 +27,63 @@ const DEFAULT_PREFS = {
     "__REPLACE_ME__ % this is where your LaTeX expression goes between $$\n" +
     "\\end{document}\n",
 };
+
+const COMMAND_PACKAGE_MAP = Object.freeze({
+  "\\bm": "bm",
+  "\\boldsymbol": "bm",
+  "\\toprule": "booktabs",
+  "\\midrule": "booktabs",
+  "\\bottomrule": "booktabs",
+  "\\cmidrule": "booktabs",
+  "\\braket": "braket",
+  "\\Bra": "braket",
+  "\\Ket": "braket",
+  "\\Set": "braket",
+  "\\cancel": "cancel",
+  "\\xcancel": "cancel",
+  "\\bcancel": "cancel",
+  "\\cancelto": "cancel",
+  "\\ce": "mhchem",
+  "\\chemfig": "chemfig",
+  "\\color": "xcolor",
+  "\\textcolor": "xcolor",
+  "\\colorbox": "xcolor",
+  "\\definecolor": "xcolor",
+  "\\mathds": "dsfont",
+  "\\url": "hyperref",
+  "\\href": "hyperref",
+  "\\mathscr": "mathrsfs",
+  "\\multirow": "multirow",
+  "\\nicefrac": "nicefrac",
+  "\\qty": "physics",
+  "\\dv": "physics",
+  "\\pdv": "physics",
+  "\\norm": "physics",
+  "\\abs": "physics",
+  "\\eval": "physics",
+  "\\order": "physics",
+  "\\comm": "physics",
+  "\\acomm": "physics",
+  "\\grad": "physics",
+  "\\curl": "physics",
+  "\\laplacian": "physics",
+  "\\SI": "siunitx",
+  "\\si": "siunitx",
+  "\\num": "siunitx",
+  "\\ang": "siunitx",
+  "\\slashed": "slashed",
+  "\\tensor": "tensor",
+  "\\indices": "tensor",
+  "\\tikz": "tikz",
+  "\\draw": "tikz",
+  "\\fill": "tikz",
+  "\\node": "tikz",
+  "\\coordinate": "tikz",
+  "\\uline": "ulem",
+  "\\sout": "ulem",
+  "\\xout": "ulem",
+  "\\feynmandiagram": "tikz-feynman",
+});
 
 const MENU_IDS = Object.freeze({
   RUN: "tblatex-run",
@@ -197,11 +256,17 @@ async function setPrefs(partialPrefs) {
   if (Object.prototype.hasOwnProperty.call(sanitized, "helperFallbackEnabled")) {
     sanitized.helperFallbackEnabled = Boolean(sanitized.helperFallbackEnabled);
   }
+  if (Object.prototype.hasOwnProperty.call(sanitized, "autoRenderOnSend")) {
+    sanitized.autoRenderOnSend = Boolean(sanitized.autoRenderOnSend);
+  }
   if (Object.prototype.hasOwnProperty.call(sanitized, "warnOnUnconvertedLatex")) {
     sanitized.warnOnUnconvertedLatex = Boolean(sanitized.warnOnUnconvertedLatex);
   }
   if (Object.prototype.hasOwnProperty.call(sanitized, "persistFormulaHistory")) {
     sanitized.persistFormulaHistory = Boolean(sanitized.persistFormulaHistory);
+  }
+  if (Object.prototype.hasOwnProperty.call(sanitized, "darkModeCompat")) {
+    sanitized.darkModeCompat = Boolean(sanitized.darkModeCompat);
   }
 
   const current = await getPrefs();
@@ -365,6 +430,172 @@ async function renderViaHelper(message, prefs, autodpi, fontPx) {
   );
 }
 
+function diagnoseLatexErrors(log) {
+  if (!log || typeof log !== "string") return [];
+
+  const diagnostics = [];
+
+  const undefinedSections = log.split("! Undefined control sequence");
+  for (let i = 1; i < undefinedSections.length; i++) {
+    const section = undefinedSections[i].slice(0, 200);
+    const cmds = section.match(/\\[a-zA-Z]+/g);
+    if (cmds) {
+      const knownCmd = cmds.find((c) => COMMAND_PACKAGE_MAP[c]);
+      const cmd = knownCmd || cmds[0];
+      const pkg = COMMAND_PACKAGE_MAP[cmd];
+      if (pkg) {
+        diagnostics.push({
+          type: "missing-package",
+          command: cmd,
+          package: pkg,
+          message: `Command ${cmd} requires \\usepackage{${pkg}}`,
+        });
+      } else {
+        diagnostics.push({
+          type: "undefined-command",
+          command: cmd,
+          message: `Unknown command ${cmd}. Check spelling or add the required package.`,
+        });
+      }
+    }
+  }
+
+  if (log.includes("Missing $ inserted")) {
+    diagnostics.push({
+      type: "missing-math-mode",
+      message: "Math mode error: you may have a math command outside $ delimiters, or mismatched $ signs.",
+    });
+  }
+
+  if (log.includes("Missing } inserted")) {
+    diagnostics.push({
+      type: "unmatched-brace",
+      message: "Unmatched brace: an opening { has no matching closing }.",
+    });
+  }
+
+  if (log.includes("Extra }")) {
+    diagnostics.push({
+      type: "extra-brace",
+      message: "Extra closing brace: a } has no matching opening {.",
+    });
+  }
+
+  if (log.includes("Missing \\right")) {
+    diagnostics.push({
+      type: "missing-right",
+      message: "Missing \\right: every \\left delimiter needs a matching \\right.",
+    });
+  }
+
+  if (log.includes("Extra \\right")) {
+    diagnostics.push({
+      type: "extra-right",
+      message: "Extra \\right: a \\right has no matching \\left.",
+    });
+  }
+
+  const envMismatch = log.match(/\\begin\{(\w+)\}.*?ended by \\end\{(\w+)\}/);
+  if (envMismatch) {
+    diagnostics.push({
+      type: "environment-mismatch",
+      message: `Environment mismatch: \\begin{${envMismatch[1]}} closed by \\end{${envMismatch[2]}}.`,
+    });
+  }
+
+  const undefEnv = log.match(/Environment (\w+) undefined/);
+  if (undefEnv) {
+    diagnostics.push({
+      type: "undefined-environment",
+      message: `Unknown environment: ${undefEnv[1]}. You may need a \\usepackage for it.`,
+    });
+  }
+
+  if (log.includes("Double superscript")) {
+    diagnostics.push({
+      type: "double-superscript",
+      message: "Double superscript: use {a^b}^c or a^{bc} instead of a^b^c.",
+    });
+  }
+
+  if (log.includes("Double subscript")) {
+    diagnostics.push({
+      type: "double-subscript",
+      message: "Double subscript: use {a_b}_c or a_{bc} instead of a_b_c.",
+    });
+  }
+
+  if (log.includes("Misplaced alignment tab")) {
+    diagnostics.push({
+      type: "misplaced-ampersand",
+      message: "Misplaced &: alignment tabs can only be used inside tabular, array, or align environments.",
+    });
+  }
+
+  const fileNotFound = log.match(/File `([^']+)' not found/);
+  if (fileNotFound) {
+    diagnostics.push({
+      type: "file-not-found",
+      message: `Package or file not found: ${fileNotFound[1]}. Install the required LaTeX package.`,
+    });
+  }
+
+  return diagnostics;
+}
+
+function applyDarkModeCompat(expr) {
+  if (!expr) return expr;
+  const beginDocMarker = "\\begin{document}";
+  const endDocMarker = "\\end{document}";
+  let beginIdx = expr.indexOf(beginDocMarker);
+  if (beginIdx < 0) return expr;
+
+  const preamble = expr.slice(0, beginIdx);
+  let additions = "";
+  if (!preamble.includes("xcolor")) {
+    additions += "\\usepackage{xcolor}\n";
+  }
+  if (!preamble.includes("contour")) {
+    additions += "\\usepackage[auto]{contour}\n\\contourlength{0.5pt}\n";
+  }
+  if (additions) {
+    expr = expr.slice(0, beginIdx) + additions + expr.slice(beginIdx);
+    beginIdx = expr.indexOf(beginDocMarker);
+  }
+
+  expr = expr.replace(
+    /\\usepackage\[([^\]]*)\]\{preview\}/,
+    (_match, options) => {
+      const filtered = options
+        .split(",")
+        .map((o) => o.trim())
+        .filter((o) => o !== "textmath" && o !== "displaymath")
+        .join(",");
+      return `\\usepackage[${filtered}]{preview}`;
+    }
+  );
+  beginIdx = expr.indexOf(beginDocMarker);
+
+  if (!expr.includes("\\contour{white}")) {
+    const contentStart = beginIdx + beginDocMarker.length;
+    const endIdx = expr.indexOf(endDocMarker);
+    if (endIdx > contentStart) {
+      const content = expr.slice(contentStart, endIdx).trim();
+      const needsPreviewWrap = !content.includes("\\begin{preview}");
+      expr =
+        expr.slice(0, contentStart) +
+        (needsPreviewWrap ? "\n\\begin{preview}\n" : "\n") +
+        "\\contour{white}{%\n" +
+        content +
+        "\n}" +
+        (needsPreviewWrap ? "\n\\end{preview}\n" : "\n") +
+        expr.slice(endIdx);
+    }
+  }
+
+  return expr;
+}
+
 async function renderLatexMessage(message) {
   let prefs = await getPrefs();
   if (!prefs.latexPath || !prefs.dvipngPath) {
@@ -381,10 +612,15 @@ async function renderLatexMessage(message) {
       ? Math.round(message.defaultFontPxOverride)
       : prefs.fontPx;
 
+  const latexExpression =
+    prefs.darkModeCompat && !message._isRetry
+      ? applyDarkModeCompat(message.latexExpression || "")
+      : message.latexExpression || "";
+
   let directResult;
   try {
     directResult = await browser.TBLatex.render(
-      message.latexExpression || "",
+      latexExpression,
       message.fontPx || "",
       message.fontColor || "",
       prefs.latexPath,
@@ -404,39 +640,86 @@ async function renderLatexMessage(message) {
     };
   }
 
+  let result;
   const directSucceeded = directResult && (directResult.status === 0 || directResult.status === 1);
   const fallbackEnabled = prefs.helperFallbackEnabled;
+
   if (directSucceeded || !fallbackEnabled) {
-    return directResult;
+    result = directResult;
+  } else {
+    const health = await checkHelperHealth(prefs, false);
+    if (!health.ok) {
+      const helperGuidance =
+        `\n!!! Local helper fallback is enabled but not reachable at ${health.url}.\n` +
+        "Start it with: python3 helper/tblatex_helper.py\n";
+      result = {
+        ...directResult,
+        log: `${directResult.log || ""}${helperGuidance}`,
+      };
+    } else {
+      try {
+        const helperResult = await renderViaHelper({ ...message, latexExpression }, prefs, autodpi, fontPx);
+        const helperLog = `*** Used local helper fallback (${health.url}).\n`;
+        result = {
+          ...helperResult,
+          log: `${helperLog}${helperResult.log || ""}`,
+        };
+      } catch (error) {
+        const helperErrorLog =
+          `\n!!! Local helper fallback failed at ${health.url}: ${String(error)}\n` +
+          "Ensure helper/tblatex_helper.py is running and try again.\n";
+        result = {
+          ...directResult,
+          log: `${directResult.log || ""}${helperErrorLog}`,
+        };
+      }
+    }
   }
 
-  const health = await checkHelperHealth(prefs, false);
-  if (!health.ok) {
-    const helperGuidance =
-      `\n!!! Local helper fallback is enabled but not reachable at ${health.url}.\n` +
-      "Start it with: python3 helper/tblatex_helper.py\n";
-    return {
-      ...directResult,
-      log: `${directResult.log || ""}${helperGuidance}`,
-    };
+  result.diagnostics = diagnoseLatexErrors(result.log);
+
+  const renderSucceeded = result.status === 0 || result.status === 1;
+  if (!message._isRetry && !renderSucceeded) {
+    const missingPackages = [
+      ...new Set(
+        result.diagnostics
+          .filter((d) => d.type === "missing-package")
+          .map((d) => d.package)
+      ),
+    ];
+
+    if (missingPackages.length > 0 && latexExpression) {
+      const expr = latexExpression;
+      const beginDocIndex = expr.indexOf("\\begin{document}");
+      if (beginDocIndex >= 0) {
+        const packageLines = missingPackages
+          .map((p) => `\\usepackage{${p}}`)
+          .join("\n");
+        const modifiedExpression =
+          expr.slice(0, beginDocIndex) +
+          packageLines +
+          "\n" +
+          expr.slice(beginDocIndex);
+
+        const retryResult = await renderLatexMessage({
+          ...message,
+          latexExpression: modifiedExpression,
+          _isRetry: true,
+        });
+
+        if (retryResult.status === 0 || retryResult.status === 1) {
+          retryResult.log =
+            `*** Auto-added package(s): ${missingPackages.join(", ")}. Consider adding them to your template.\n` +
+            (retryResult.log || "");
+          retryResult.diagnostics = [];
+          retryResult.autoPackages = missingPackages;
+          return retryResult;
+        }
+      }
+    }
   }
 
-  try {
-    const helperResult = await renderViaHelper(message, prefs, autodpi, fontPx);
-    const helperLog = `*** Used local helper fallback (${health.url}).\n`;
-    return {
-      ...helperResult,
-      log: `${helperLog}${helperResult.log || ""}`,
-    };
-  } catch (error) {
-    const helperErrorLog =
-      `\n!!! Local helper fallback failed at ${health.url}: ${String(error)}\n` +
-      "Ensure helper/tblatex_helper.py is running and try again.\n";
-    return {
-      ...directResult,
-      log: `${directResult.log || ""}${helperErrorLog}`,
-    };
-  }
+  return result;
 }
 
 async function isHtmlComposeTab(tabId) {
@@ -778,6 +1061,11 @@ if (browser.compose && browser.compose.onBeforeSend) {
 
     await removeComposeRunReport(tab.id);
     const prefs = await getPrefs();
+
+    if (prefs.autoRenderOnSend) {
+      await runLatexify(tab.id, true);
+    }
+
     if (!prefs.warnOnUnconvertedLatex) {
       return {};
     }

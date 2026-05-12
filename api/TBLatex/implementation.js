@@ -151,6 +151,27 @@ function readFileBytes(file, maxBytes = -1) {
   return bytes;
 }
 
+function readLatexLogErrors(logFile) {
+  if (!logFile || !logFile.exists()) return "";
+  try {
+    const bytes = readFileBytes(logFile, 8192);
+    const text = Array.from(bytes, (b) => String.fromCharCode(b & 0xff)).join("");
+    const lines = text.split("\n");
+    const result = [];
+    for (let i = 0; i < lines.length; i++) {
+      if (lines[i].startsWith("!")) {
+        for (let j = i; j < Math.min(i + 3, lines.length); j++) {
+          result.push(lines[j]);
+        }
+        i += 2;
+      }
+    }
+    return result.join("\n");
+  } catch (e) {
+    return "";
+  }
+}
+
 function hasPngSignature(bytes) {
   if (!bytes || bytes.length < 8) {
     return false;
@@ -460,13 +481,16 @@ var TBLatex = class extends ExtensionCommon.ExtensionAPI {
             }
 
             if (!files.dviFile.exists()) {
+              const latexLogErrors = readLatexLogErrors(files.logFile);
+              const errorDetail = latexLogErrors ? `\n${latexLogErrors}\n` : "";
               return {
                 status: 2,
                 depth: 0,
                 dataUrl: "",
                 log:
                   log +
-                  "!!! LaTeX did not output a .dvi file, something went wrong.\n",
+                  "!!! LaTeX did not output a .dvi file, something went wrong.\n" +
+                  errorDetail,
               };
             }
 

@@ -56,10 +56,18 @@
           Render scale multiplier (higher is sharper)
           <input id="renderScale" type="number" min="1" max="8" step="1" />
         </label>
+        <label class="checkbox">
+          <input id="darkModeCompat" type="checkbox" />
+          Dark mode compatibility (adds white outline for readability on dark backgrounds)
+        </label>
       </section>
 
       <section>
         <h2>Sending</h2>
+        <label class="checkbox">
+          <input id="autoRenderOnSend" type="checkbox" />
+          Automatically render LaTeX expressions when sending
+        </label>
         <label class="checkbox">
           <input id="warnOnUnconvertedLatex" type="checkbox" />
           Warn before send if unconverted LaTeX markers remain
