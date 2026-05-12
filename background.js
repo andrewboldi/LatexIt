@@ -16,6 +16,9 @@ const DEFAULT_PREFS = {
   template:
     "\\documentclass{article}\n" +
     "\\usepackage[utf8]{inputenc}\n" +
+    "\\usepackage{amsmath}\n" +
+    "\\usepackage{amssymb}\n" +
+    "\\usepackage{amsfonts}\n" +
     "\\usepackage[active,displaymath,textmath]{preview} % DO NOT DELETE - this is required for baseline alignment\n" +
     "\\pagestyle{empty}\n" +
     "\\begin{document}\n" +
