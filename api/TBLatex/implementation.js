@@ -470,6 +470,10 @@ var TBLatex = class extends ExtensionCommon.ExtensionAPI {
             writeUtf8TextFile(files.texFile, latexExpression);
 
             const latexArgs = [
+              // Disable \write18 shell execution regardless of the TeX
+              // distribution's default, so malicious LaTeX cannot run shell
+              // commands.
+              "-no-shell-escape",
               `-output-directory=${files.tempDir.path}`,
               "-interaction=batchmode",
               files.texFile.path,

@@ -180,6 +180,9 @@ def render(payload: dict[str, Any]) -> dict[str, Any]:
 
         latex_args = [
             latex_path,
+            # Disable \write18 shell execution regardless of the TeX distribution's
+            # default, so malicious LaTeX cannot run shell commands.
+            "-no-shell-escape",
             f"-output-directory={temp_dir}",
             "-interaction=batchmode",
             tex_file,
@@ -272,25 +275,44 @@ def render(payload: dict[str, Any]) -> dict[str, Any]:
 class RequestHandler(BaseHTTPRequestHandler):
     server_version = "tblatex-helper/0.1"
 
+    # Only localhost may be addressed. This rejects DNS-rebinding attacks, where an
+    # attacker domain resolves to 127.0.0.1 and the Host header carries that domain
+    # rather than localhost.
+    ALLOWED_HOSTNAMES = ("127.0.0.1", "localhost", "::1")
+
+    def _host_allowed(self) -> bool:
+        host = (self.headers.get("Host") or "").strip().lower()
+        if not host:
+            return False
+        if host.startswith("["):  # IPv6 literal, e.g. [::1]:3737
+            hostname = host[1 : host.index("]")] if "]" in host else host
+        else:
+            hostname = host.rsplit(":", 1)[0]
+        return hostname in self.ALLOWED_HOSTNAMES
+
     def _send_json(self, status_code: int, payload: dict[str, Any]) -> None:
+        # No CORS headers are sent. The extension calls the helper with
+        # host-permission privileges and is not subject to CORS, so it does not
+        # need them; omitting them means a browser will not expose responses to a
+        # web page, and (with no permissive preflight) will not let a page POST
+        # JSON or custom headers to the helper.
         body = json.dumps(payload).encode("utf-8")
         self.send_response(status_code)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(body)))
-        self.send_header("Access-Control-Allow-Origin", "*")
-        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-        self.send_header("Access-Control-Allow-Headers", "Content-Type")
         self.end_headers()
         self.wfile.write(body)
 
     def do_OPTIONS(self) -> None:  # noqa: N802
+        # Deliberately no Access-Control-Allow-* headers: a cross-origin preflight
+        # from a web page fails here, blocking drive-by requests.
         self.send_response(204)
-        self.send_header("Access-Control-Allow-Origin", "*")
-        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-        self.send_header("Access-Control-Allow-Headers", "Content-Type")
         self.end_headers()
 
     def do_GET(self) -> None:  # noqa: N802
+        if not self._host_allowed():
+            self._send_json(403, {"ok": False, "error": "forbidden host"})
+            return
         route = self.path.split("?", 1)[0]
         if route != "/health":
             self._send_json(404, {"ok": False, "error": "not found"})
@@ -308,9 +330,20 @@ class RequestHandler(BaseHTTPRequestHandler):
         )
 
     def do_POST(self) -> None:  # noqa: N802
+        if not self._host_allowed():
+            self._send_json(403, {"ok": False, "error": "forbidden host"})
+            return
         route = self.path.split("?", 1)[0]
         if route != "/render":
             self._send_json(404, {"ok": False, "error": "not found"})
+            return
+
+        # Require the extension's custom header. A browser cannot attach a custom
+        # header to a cross-origin request without a CORS preflight, which the
+        # helper rejects -- so this blocks drive-by requests from web pages while
+        # the extension (which sends the header) is unaffected.
+        if not (self.headers.get("X-TBLatex-Client") or "").strip():
+            self._send_json(403, {"ok": False, "error": "missing client header"})
             return
 
         try:

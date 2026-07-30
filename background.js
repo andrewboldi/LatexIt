@@ -412,6 +412,10 @@ async function renderViaHelper(message, prefs, autodpi, fontPx) {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        // Custom header the helper requires. A web page cannot send a custom
+        // cross-origin header without a CORS preflight, which the helper now
+        // rejects, so this blocks drive-by requests to the localhost service.
+        "X-TBLatex-Client": "1",
       },
       body: JSON.stringify({
         latexExpression: message.latexExpression || "",
