@@ -5,6 +5,7 @@ const LATEX_PATTERN = /\$\$[^\$]+\$\$|\$[^\$]+\$|\\\[[\s\S]*?\\\]|\\\([\s\S]*?\\
 const INLINE_LATEX_EXACT_PATTERN = /^(?:\$\$[^\$]+\$\$|\$[^\$]+\$|\\\[[\s\S]*\\\]|\\\([\s\S]*\\\))$/;
 const FORMULA_HISTORY_LIMIT = 50;
 const PREVIEW_TOOLTIP_ID = "tblatex-preview-tooltip";
+const FORMULA_STYLE_ATTR = "data-tblatex-style";
 
 let undoStack = [];
 let lastComplexExpression = "";
@@ -58,7 +59,8 @@ function splitTextNodes(node) {
     node.id === PREVIEW_TOOLTIP_ID ||
     node.tagName === "SCRIPT" ||
     node.tagName === "STYLE" ||
-    node.tagName === "IMG"
+    node.tagName === "IMG" ||
+    node.classList.contains("tblatex")
   ) {
     return latexNodes;
   }
@@ -140,17 +142,8 @@ function extractExpressionFromTemplate(template, latexDocument) {
   return INLINE_LATEX_EXACT_PATTERN.test(expression.trim()) ? expression : "";
 }
 
-function normalizeColor(color) {
-  const match = color.match(/rgba?\(([^)]+)\)/i);
-  if (!match) {
-    return "RGB 0 0 0";
-  }
-
-  const parts = match[1]
-    .split(",")
-    .slice(0, 3)
-    .map((part) => part.trim());
-  return `RGB ${parts.join(" ")}`;
+function getFormulaColor(element) {
+  return formulaColor(element, window.getComputedStyle(element).color);
 }
 
 function getCaretElement() {
@@ -248,9 +241,58 @@ async function runLatexRender(latexExpression, fontPx, fontColor, overrides = {}
     latexExpression,
     fontPx,
     fontColor,
+    contour: Boolean(overrides.contour),
     autodpiOverride: overrides.autodpiOverride,
     defaultFontPxOverride: overrides.defaultFontPxOverride,
   });
+}
+
+function isRenderOk(result) {
+  return Boolean(result && (result.status === 0 || result.status === 1) && result.dataUrl);
+}
+
+// Returns { result, white }: result is the image every mail client can show
+// (outlined when dark mode compatibility is on), white is the same formula in
+// white for the dark-mode markup, or null.
+async function renderFormula(latexExpression, fontPx, fontColor, overrides, darkModeCompat) {
+  if (!darkModeCompat) {
+    return {
+      result: await runLatexRender(latexExpression, fontPx, fontColor, overrides),
+      white: null,
+    };
+  }
+
+  const [outlined, white] = await Promise.all([
+    runLatexRender(latexExpression, fontPx, fontColor, { ...overrides, contour: true }),
+    runLatexRender(latexExpression, fontPx, WHITE_FORMULA_COLOR, overrides),
+  ]);
+  // The outline puts the formula in a box that some LaTeX cannot go into
+  // (environments such as align); send the plain render then.
+  const result =
+    outlined && outlined.status === 0 && outlined.dataUrl
+      ? outlined
+      : await runLatexRender(latexExpression, fontPx, fontColor, overrides);
+  return { result, white: isRenderOk(white) ? white : null };
+}
+
+function ensureFormulaStyles() {
+  for (const style of document.querySelectorAll(`style[${FORMULA_STYLE_ATTR}]`)) {
+    style.remove();
+  }
+  if (!document.body || !document.querySelector(".tblatex .tbx-m")) {
+    return false;
+  }
+
+  const head = document.head || document.documentElement;
+  for (const css of TBLATEX_STYLES) {
+    const style = document.createElement("style");
+    style.setAttribute(FORMULA_STYLE_ATTR, "");
+    style.textContent = css;
+    head.appendChild(style);
+  }
+  // Gmail's rules match the body through this class.
+  document.body.classList.add("tbx-body");
+  return true;
 }
 
 function normalizeSourceValue(value) {
@@ -450,13 +492,42 @@ async function getFormulaHistoryForUi() {
   return getFormulaHistory();
 }
 
+function isDisplayMathSource(altText, options) {
+  const sourceExpr = (options.sourceExpression || altText || "").trim();
+  return sourceExpr.startsWith("$$") || sourceExpr.startsWith("\\[");
+}
+
+// One formula as inserted into the message: the light/dark markup when the
+// white render is available, otherwise a single image.
+function makeFormulaNode(renders, altText, titleText, options = {}) {
+  const html = renders.white
+    ? buildFormulaHtml({
+        fallback: renders.result,
+        white: renders.white,
+        isDisplayMath: isDisplayMathSource(altText, options),
+      })
+    : "";
+  if (!html) {
+    return makeImageFromResult(renders.result, altText, titleText, options);
+  }
+
+  const template = document.createElement("template");
+  template.innerHTML = html;
+  const wrapper = template.content.firstElementChild;
+  wrapper.title = titleText;
+  const img = wrapper.querySelector(".tbx-b img");
+  img.alt = altText;
+  applyFormulaMetadata(img, options);
+  wrapper.querySelector(".tbx-m").setAttribute("aria-label", altText);
+  return wrapper;
+}
+
 function makeImageFromResult(result, altText, titleText, options = {}) {
   const renderScale = Number(result && result.renderScale) > 0
     ? Number(result.renderScale)
     : 1;
   const depth = Number(result && result.depth) || 0;
-  const sourceExpr = (options.sourceExpression || altText || "").trim();
-  const isDisplayMath = sourceExpr.startsWith("$$") || sourceExpr.startsWith("\\[");
+  const isDisplayMath = isDisplayMathSource(altText, options);
   const img = document.createElement("img");
   img.alt = altText;
   img.title = titleText;
@@ -529,6 +600,13 @@ function setCaretAfterNode(node) {
   }
 }
 
+function getFormulaWrapper(node) {
+  const element = node && node.nodeType === Node.TEXT_NODE ? node.parentElement : node;
+  return element && element.closest ? element.closest(".tblatex") : null;
+}
+
+// The selected formula image; for the light/dark markup, its fallback image,
+// which carries the formula's source.
 function getSelectedImageNode() {
   const selection = window.getSelection();
   if (!selection || selection.rangeCount === 0) {
@@ -543,12 +621,19 @@ function getSelectedImageNode() {
       if (selectedNode && selectedNode.nodeType === Node.ELEMENT_NODE && selectedNode.tagName === "IMG") {
         return selectedNode;
       }
+      if (selectedNode && selectedNode.nodeType === Node.ELEMENT_NODE && selectedNode.classList.contains("tblatex")) {
+        return selectedNode.querySelector(".tbx-b img");
+      }
     }
   }
 
   for (const node of [selection.anchorNode, selection.focusNode, range.commonAncestorContainer]) {
     if (node && node.nodeType === Node.ELEMENT_NODE && node.tagName === "IMG") {
       return node;
+    }
+    const wrapper = getFormulaWrapper(node);
+    if (wrapper) {
+      return wrapper.querySelector(".tbx-b img");
     }
   }
 
@@ -772,11 +857,13 @@ async function latexify({ silent }) {
     const parent = textNode.parentElement || document.body;
     const style = window.getComputedStyle(parent);
     const fontPx = style.getPropertyValue("font-size") || `${prefs.fontPx}px`;
-    const fontColor = normalizeColor(style.getPropertyValue("color"));
+    const fontColor = getFormulaColor(parent);
 
+    let renders;
     let renderResult;
     try {
-      renderResult = await runLatexRender(latexExpression, fontPx, fontColor);
+      renders = await renderFormula(latexExpression, fontPx, fontColor, {}, prefs.darkModeCompat);
+      renderResult = renders.result;
     } catch (error) {
       logs.push(`!!! Could not render "${originalText}": ${String(error)}\n`);
       failed++;
@@ -799,20 +886,20 @@ async function latexify({ silent }) {
         sourceExpression: originalText,
         sourceDocument: latexExpression,
       };
-      const img = makeImageFromResult(renderResult, originalText, originalText, formulaSeed);
+      const formulaNode = makeFormulaNode(renders, originalText, originalText, formulaSeed);
       if (textNode.parentNode) {
         const movedCaret = moveCaretAwayFromTextNode(textNode);
-        textNode.parentNode.insertBefore(img, textNode);
+        textNode.parentNode.insertBefore(formulaNode, textNode);
         textNode.parentNode.removeChild(textNode);
         if (movedCaret) {
-          setCaretAfterNode(img);
+          setCaretAfterNode(formulaNode);
         }
         undoStack.push(() => {
-          if (!img.parentNode) {
+          if (!formulaNode.parentNode) {
             return;
           }
-          img.parentNode.insertBefore(textNode, img);
-          img.parentNode.removeChild(img);
+          formulaNode.parentNode.insertBefore(textNode, formulaNode);
+          formulaNode.parentNode.removeChild(formulaNode);
         });
       }
       addFormulaToHistory(formulaSeed);
@@ -820,6 +907,10 @@ async function latexify({ silent }) {
     } else {
       failed++;
     }
+  }
+
+  if (converted) {
+    ensureFormulaStyles();
   }
 
   if ((prefs.log || diagnosticCount > 0) && logs.length) {
@@ -874,14 +965,22 @@ async function insertComplex({ latexExpression, autodpi, fontPx }) {
   const element = getCaretElement();
   const style = window.getComputedStyle(element);
   const resolvedFontPx = autodpi ? style.getPropertyValue("font-size") : `${fontPx}px`;
-  const fontColor = normalizeColor(style.getPropertyValue("color"));
+  const fontColor = getFormulaColor(element);
 
+  let renders;
   let renderResult;
   try {
-    renderResult = await runLatexRender(latexExpression, resolvedFontPx, fontColor, {
-      autodpiOverride: autodpi,
-      defaultFontPxOverride: Number(fontPx) || 16,
-    });
+    renders = await renderFormula(
+      latexExpression,
+      resolvedFontPx,
+      fontColor,
+      {
+        autodpiOverride: autodpi,
+        defaultFontPxOverride: Number(fontPx) || 16,
+      },
+      prefs.darkModeCompat
+    );
+    renderResult = renders.result;
   } catch (error) {
     logs.push(`!!! Could not render complex LaTeX: ${String(error)}\n`);
     if (prefs.log) {
@@ -908,29 +1007,32 @@ async function insertComplex({ latexExpression, autodpi, fontPx }) {
       sourceDocument: latexExpression,
       complexSource: latexExpression,
     };
-    const img = makeImageFromResult(renderResult, accessibleText, accessibleText, formulaSeed);
+    const formulaNode = makeFormulaNode(renders, accessibleText, accessibleText, formulaSeed);
+    // A formula in the light/dark markup is replaced as a whole.
+    const replaced = selectedImage ? getFormulaWrapper(selectedImage) || selectedImage : null;
 
-    if (selectedImage && selectedImage.parentNode) {
-      selectedImage.parentNode.insertBefore(img, selectedImage);
-      selectedImage.parentNode.removeChild(selectedImage);
-      setCaretAfterNode(img);
+    if (replaced && replaced.parentNode) {
+      replaced.parentNode.insertBefore(formulaNode, replaced);
+      replaced.parentNode.removeChild(replaced);
+      setCaretAfterNode(formulaNode);
       undoStack.push(() => {
-        if (!img.parentNode) {
+        if (!formulaNode.parentNode) {
           return;
         }
-        img.parentNode.insertBefore(selectedImage, img);
-        img.parentNode.removeChild(img);
-        setCaretAfterNode(selectedImage);
+        formulaNode.parentNode.insertBefore(replaced, formulaNode);
+        formulaNode.parentNode.removeChild(formulaNode);
+        setCaretAfterNode(replaced);
       });
     } else {
-      insertImageAtSelection(img);
+      insertImageAtSelection(formulaNode);
       undoStack.push(() => {
-        if (img.parentNode) {
-          img.parentNode.removeChild(img);
+        if (formulaNode.parentNode) {
+          formulaNode.parentNode.removeChild(formulaNode);
         }
       });
     }
 
+    ensureFormulaStyles();
     addFormulaToHistory(formulaSeed);
     lastComplexExpression = latexExpression;
     if (prefs.log && logs.length) {
@@ -1078,7 +1180,7 @@ async function updateComposePreview() {
   const element = getCaretElement();
   const style = window.getComputedStyle(element);
   const fontPx = style.getPropertyValue("font-size") || `${currentPrefs.fontPx}px`;
-  const fontColor = normalizeColor(style.getPropertyValue("color"));
+  const fontColor = getFormulaColor(element);
 
   try {
     const result = await runLatexRender(latexDocument, fontPx, fontColor);
@@ -1142,6 +1244,20 @@ document.addEventListener("paste", (event) => {
 document.addEventListener("selectionchange", handleComposePreviewCheck);
 window.addEventListener("blur", removePreviewTooltip);
 
+// A formula is not editable inside; a click selects all of it, so it can be
+// deleted, copied, or edited with Insert complex LaTeX.
+document.addEventListener("click", (event) => {
+  const wrapper = getFormulaWrapper(event.target);
+  const selection = window.getSelection();
+  if (!wrapper || !selection) {
+    return;
+  }
+  const range = document.createRange();
+  range.selectNode(wrapper);
+  selection.removeAllRanges();
+  selection.addRange(range);
+});
+
 browser.runtime.onMessage.addListener((message) => {
   switch (message && message.command) {
     case "latexify":
@@ -1172,7 +1288,13 @@ browser.runtime.onMessage.addListener((message) => {
     }
     case "confirmSendWithLatexCheck":
       return Promise.resolve(confirmSendWithLatexCheck());
+    case "ensureFormulaStyles":
+      return Promise.resolve({ ok: true, styled: ensureFormulaStyles() });
     default:
       return null;
   }
 });
+
+// Thunderbird drops the @supports block when it reopens a draft or a sent
+// message for editing; put the full set back.
+ensureFormulaStyles();

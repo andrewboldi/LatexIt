@@ -543,6 +543,13 @@ function diagnoseLatexErrors(log) {
   return diagnostics;
 }
 
+// \contour sets its argument in a horizontal box, where \[...\] is an error:
+// draw that formula as display-style inline math instead.
+function toInlineDisplayMath(content) {
+  const match = content.match(/^\\\[((?:(?!\\\])[\s\S])*)\\\](\s*%[^\n]*)?$/);
+  return match ? "$\\displaystyle " + match[1] + "$" + (match[2] || "") : content;
+}
+
 function applyDarkModeCompat(expr) {
   if (!expr) return expr;
   const beginDocMarker = "\\begin{document}";
@@ -580,7 +587,7 @@ function applyDarkModeCompat(expr) {
     const contentStart = beginIdx + beginDocMarker.length;
     const endIdx = expr.indexOf(endDocMarker);
     if (endIdx > contentStart) {
-      const content = expr.slice(contentStart, endIdx).trim();
+      const content = toInlineDisplayMath(expr.slice(contentStart, endIdx).trim());
       const needsPreviewWrap = !content.includes("\\begin{preview}");
       expr =
         expr.slice(0, contentStart) +
@@ -612,8 +619,10 @@ async function renderLatexMessage(message) {
       ? Math.round(message.defaultFontPxOverride)
       : prefs.fontPx;
 
+  // The compose script asks for the white outline only for the image it sends
+  // to every mail client; previews and the white render go without.
   const latexExpression =
-    prefs.darkModeCompat && !message._isRetry
+    message.contour && !message._isRetry
       ? applyDarkModeCompat(message.latexExpression || "")
       : message.latexExpression || "";
 
@@ -737,7 +746,7 @@ async function ensureComposeScriptRegistered() {
   }
   try {
     composeScriptRegistration = await browser.composeScripts.register({
-      js: [{ file: "compose/compose-script.js" }],
+      js: [{ file: "compose/formula-markup.js" }, { file: "compose/compose-script.js" }],
     });
   } catch (error) {
     // compose_scripts manifest key handles injection on newer TB versions
@@ -1064,6 +1073,13 @@ if (browser.compose && browser.compose.onBeforeSend) {
 
     if (prefs.autoRenderOnSend) {
       await runLatexify(tab.id, true);
+    }
+
+    try {
+      await sendComposeCommand(tab.id, { command: "ensureFormulaStyles" });
+    } catch (error) {
+      // Don't block sending if the compose script is unavailable for this tab.
+      console.warn("Could not add formula styles before send:", error);
     }
 
     if (!prefs.warnOnUnconvertedLatex) {

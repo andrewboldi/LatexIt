@@ -7,7 +7,7 @@ XPI_DEST = $(HOME)/.thunderbird/zbm35iiu.default-default/extensions/tblatex@andr
 
 all: dist
 
-.PHONY: dist clean install
+.PHONY: dist clean install test
 dist:
 	./scripts/build_xpi.sh "$(OUT)" "$(ADDON_ID)"
 
@@ -15,6 +15,9 @@ install: dist
 	cp "$(OUT)" "$(XPI_DEST)"
 	cp "$(HELPER_SRC)" "$(HELPER_DEST)"
 	systemctl --user restart tblatex-helper.service || systemctl --user start tblatex-helper.service
+
+test:
+	node --test 'tests/*.test.js'
 
 clean:
 	rm -f tblatex.xpi

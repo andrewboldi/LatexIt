@@ -1,3 +1,14 @@
+--v0.8.17
+
+- Formulas no longer depend on the theme you compose in: they render black (or in
+  the color you gave the text), so light and dark compose windows send the same message.
+- With dark mode compatibility on, each formula is sent in three forms: it takes the
+  reader's text color in Thunderbird, turns white on dark backgrounds in Gmail, and keeps
+  the white outline in other mail apps.
+- The white outline now works for \[...\] formulas. LaTeX that cannot take the outline
+  (environments such as align) is sent without it instead of garbled.
+- Previews no longer draw the white outline.
+
 --v0.8.16
 
 - Added a settings option to persist recent formula history across compose windows.
