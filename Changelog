@@ -1,3 +1,12 @@
+--v0.8.18
+
+- Security hardening, contributed by Andrew Mathas: latex now runs with
+  -no-shell-escape, so a formula cannot run shell commands, and the local helper only
+  answers requests sent to localhost by LaTeX It! itself.
+- If you use the local helper, update it too: run `bash helper/install-systemd-user.sh`,
+  then `systemctl --user restart tblatex-helper.service` (or restart
+  `python3 helper/tblatex_helper.py`). Older helpers keep working with this version.
+
 --v0.8.17
 
 - Formulas no longer depend on the theme you compose in: they render black (or in
