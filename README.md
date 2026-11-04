@@ -95,11 +95,11 @@ Formulas render the same whichever theme you compose in: black, or the color
 you gave the text. With `Dark mode compatibility` on (the default), each formula
 is sent so that it follows the reader's theme:
 
-- Thunderbird: the formula takes the reader's text color, light or dark.
-- Gmail (web and apps): the formula turns white on dark backgrounds. In the
-  Gmail apps' dark mode it sits on a slightly lighter patch.
-- Other mail apps, including Apple Mail: the image has a thin white outline, so
-  it stays readable on dark backgrounds.
+- Thunderbird and Apple Mail: the formula takes the reader's text color, light
+  or dark.
+- Gmail (web and apps): the formula turns white on dark backgrounds.
+- Other mail apps: the image has a thin white outline, so it stays readable on
+  dark backgrounds.
 
 Sandbox Fallback (Snap/Flatpak)
 -------------------------------

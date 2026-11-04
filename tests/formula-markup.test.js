@@ -66,7 +66,7 @@ const white = { dataUrl: fakePngDataUrl(345, 66), depth: 13, renderScale: 4 };
 
 test("formula markup has the fallback, Gmail and mask forms in order", () => {
   const html = buildFormulaHtml({ fallback, white, isDisplayMath: false });
-  const order = ["tbx-b", "tbx-w", "tbx-l3", "tbx-l2", "tbx-l1", "tbx-m"].map((c) => html.indexOf(`class="${c}"`));
+  const order = ["tbx-b", "tbx-w", "tbx-l1", "tbx-m"].map((c) => html.indexOf(`class="${c}"`));
   assert.ok(order.every((index) => index > 0), html);
   assert.deepEqual([...order].sort((a, b) => a - b), order);
   assert.ok(html.startsWith('<span class="tblatex" contenteditable="false">'));
@@ -111,6 +111,16 @@ test("style blocks: one per mail client, in separate elements", () => {
   assert.ok(thunderbird.split("\n").filter(Boolean).every((rule) => rule.startsWith(".moz-text-html ")));
   assert.ok(editor.split("\n").filter(Boolean).every((rule) => rule.startsWith("body:read-write ")));
   assert.ok(apple.startsWith("@supports (-apple-color-filter: none) {"));
+});
+
+test("Gmail's form blends the white image directly over the white box", () => {
+  const [gmail] = TBLATEX_STYLES;
+  assert.match(gmail, /u \+ \.tbx-body \.tbx-l1 \{[^}]*mix-blend-mode:difference;/);
+  // Gmail on Android recolors gradients in dark mode, which cancels a blend
+  // built on them out to a black formula.
+  assert.doesNotMatch(gmail, /gradient/);
+  const html = buildFormulaHtml({ fallback, white, isDisplayMath: false });
+  assert.match(html, /class="tbx-w" style="[^"]*background-color:#ffffff;[^"]*"><span class="tbx-l1"><img src="data:/);
 });
 
 test("every client that shows the mask also hides the fallback image", () => {

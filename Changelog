@@ -1,3 +1,10 @@
+--v0.8.19
+
+- Fixed formulas showing dark on dark in the Gmail Android app's dark mode. Gmail on
+  Android also recolors gradients, which canceled out the blend used for Gmail; the
+  white formula is now blended directly with its box, which looks the same everywhere
+  else. Thanks to michael-markl for the report and the idea.
+
 --v0.8.18
 
 - Security hardening, contributed by Andrew Mathas: latex now runs with

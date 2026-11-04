@@ -7,8 +7,8 @@
 // Each formula is sent in three forms, and the style blocks below show one per
 // mail client:
 //   .tbx-b  fallback image: formula color with a white outline (\contour)
-//   .tbx-w  white image inside a stack of blend modes that inverts its backdrop
-//           (Gmail)
+//   .tbx-w  white image on a white box, blended with `difference`: black on
+//           the box, white once a dark mode darkens the box (Gmail)
 //   .tbx-m  empty span whose background, the surrounding text color, is cut to
 //           the formula's shape by a CSS mask (Thunderbird, and Apple Mail
 //           where it matches the Apple block)
@@ -17,13 +17,13 @@ const DEFAULT_FORMULA_COLOR = "RGB 0 0 0";
 const WHITE_FORMULA_COLOR = "RGB 255 255 255";
 
 const TBLATEX_STYLES = [
-  // Gmail (web and apps) turns <body> into a <div> right after a <u>.
+  // Gmail (web and apps) turns <body> into a <div> right after a <u>. The
+  // white box is the blend's backdrop because the Gmail iOS app does not let
+  // blends see the page. Gmail on Android also recolors gradients in dark
+  // mode, so no gradient may take part.
   "u + .tbx-body .tbx-b { display:none !important; }\n" +
     "u + .tbx-body .tbx-w { display:inline-block !important; font-size:0; line-height:0; }\n" +
-    "u + .tbx-body .tbx-l3, u + .tbx-body .tbx-l2, u + .tbx-body .tbx-l1 { display:inline-block; font-size:0; line-height:0; }\n" +
-    "u + .tbx-body .tbx-l3 { background-image:linear-gradient(#ffffff,#ffffff); mix-blend-mode:difference; }\n" +
-    "u + .tbx-body .tbx-l2 { background-image:linear-gradient(#808080,#808080); mix-blend-mode:hard-light; }\n" +
-    "u + .tbx-body .tbx-l1 { background-image:linear-gradient(#808080,#808080); mix-blend-mode:difference; }\n" +
+    "u + .tbx-body .tbx-l1 { display:inline-block; font-size:0; line-height:0; mix-blend-mode:difference; }\n" +
     "u + .tbx-body .tbx-l1 img { vertical-align:baseline !important; }\n",
   // Thunderbird's message view wraps every HTML body in .moz-text-html.
   ".moz-text-html .tbx-b { display:none !important; }\n" +
@@ -129,9 +129,9 @@ function buildFormulaHtml({ fallback, white, isDisplayMath }) {
     '<span class="tblatex" contenteditable="false">' +
     `<span class="tbx-b"><img src="${fallback.dataUrl}" ${b.attrs} style="${fallbackStyle}"></span>` +
     `<span class="tbx-w" style="display:none;mso-hide:all;background-color:#ffffff;vertical-align:${w.verticalAlign}">` +
-    '<span class="tbx-l3"><span class="tbx-l2"><span class="tbx-l1">' +
+    '<span class="tbx-l1">' +
     `<img src="${white.dataUrl}" ${w.attrs} alt="" style="${whiteStyle}">` +
-    "</span></span></span></span>" +
+    "</span></span>" +
     `<span class="tbx-m" role="img" style="display:none;mso-hide:all;${whiteStyle};` +
     `background-color:currentColor;--tbx-mask:url(${white.dataUrl});` +
     "-webkit-mask-image:var(--tbx-mask);-webkit-mask-size:100% 100%;-webkit-mask-repeat:no-repeat;" +
