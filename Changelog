@@ -1,3 +1,10 @@
+--v0.8.20
+
+- Formulas now follow the reader's light or dark theme in Outlook on the web and the
+  new Outlook for Windows, which get the same form as Gmail. Classic Outlook and the
+  Outlook apps for Mac and iPhone keep the white outline. Thanks to michael-markl for
+  the idea and the Outlook HTML it is based on.
+
 --v0.8.19
 
 - Fixed formulas showing dark on dark in the Gmail Android app's dark mode. Gmail on

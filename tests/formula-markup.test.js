@@ -105,12 +105,19 @@ test("formula markup needs both renders", () => {
 });
 
 test("style blocks: one per mail client, in separate elements", () => {
-  const [gmail, thunderbird, editor, apple] = TBLATEX_STYLES;
-  assert.equal(TBLATEX_STYLES.length, 4);
+  const [gmail, thunderbird, editor, apple, outlook] = TBLATEX_STYLES;
+  assert.equal(TBLATEX_STYLES.length, 5);
   assert.ok(gmail.split("\n").filter(Boolean).every((rule) => rule.startsWith("u + .tbx-body ")));
   assert.ok(thunderbird.split("\n").filter(Boolean).every((rule) => rule.startsWith(".moz-text-html ")));
   assert.ok(editor.split("\n").filter(Boolean).every((rule) => rule.startsWith("body:read-write ")));
   assert.ok(apple.startsWith("@supports (-apple-color-filter: none) {"));
+  // Outlook renames the body's class to x_tbx-body, but not inside attribute selectors.
+  assert.ok(outlook.split("\n").filter(Boolean).every((rule) => rule.startsWith('[class~="x_tbx-body"] ')));
+});
+
+test("Outlook gets Gmail's form behind its own gate", () => {
+  const [gmail, , , , outlook] = TBLATEX_STYLES;
+  assert.equal(outlook.replaceAll('[class~="x_tbx-body"]', "u + .tbx-body"), gmail);
 });
 
 test("Gmail's form blends the white image directly over the white box", () => {
@@ -124,7 +131,8 @@ test("Gmail's form blends the white image directly over the white box", () => {
 });
 
 test("every client that shows the mask also hides the fallback image", () => {
-  for (const block of TBLATEX_STYLES.slice(1)) {
+  const [, thunderbird, editor, apple] = TBLATEX_STYLES;
+  for (const block of [thunderbird, editor, apple]) {
     assert.match(block, /\.tbx-b \{ display:none !important; \}/);
     assert.match(block, /\.tbx-m \{ display:inline-block !important;/);
   }

@@ -8,7 +8,7 @@
 // mail client:
 //   .tbx-b  fallback image: formula color with a white outline (\contour)
 //   .tbx-w  white image on a white box, blended with `difference`: black on
-//           the box, white once a dark mode darkens the box (Gmail)
+//           the box, white once a dark mode darkens the box (Gmail, Outlook)
 //   .tbx-m  empty span whose background, the surrounding text color, is cut to
 //           the formula's shape by a CSS mask (Thunderbird, and Apple Mail
 //           where it matches the Apple block)
@@ -37,6 +37,13 @@ const TBLATEX_STYLES = [
     ".tbx-b { display:none !important; }\n" +
     ".tbx-m { display:inline-block !important; background-color:#050505 !important; }\n" +
     "}\n",
+  // Outlook on the web and the new Outlook for Windows prefix every class with
+  // x_, in the HTML and in class selectors, but leave attribute selectors
+  // alone, so this gate matches only there. Same form as Gmail.
+  '[class~="x_tbx-body"] .tbx-b { display:none !important; }\n' +
+    '[class~="x_tbx-body"] .tbx-w { display:inline-block !important; font-size:0; line-height:0; }\n' +
+    '[class~="x_tbx-body"] .tbx-l1 { display:inline-block; font-size:0; line-height:0; mix-blend-mode:difference; }\n' +
+    '[class~="x_tbx-body"] .tbx-l1 img { vertical-align:baseline !important; }\n',
 ];
 
 function normalizeColor(color) {

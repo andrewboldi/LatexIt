@@ -290,7 +290,7 @@ function ensureFormulaStyles() {
     style.textContent = css;
     head.appendChild(style);
   }
-  // Gmail's rules match the body through this class.
+  // Gmail's and Outlook's rules match the body through this class.
   document.body.classList.add("tbx-body");
   return true;
 }
