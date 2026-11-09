@@ -97,8 +97,8 @@ is sent so that it follows the reader's theme:
 
 - Thunderbird and Apple Mail: the formula takes the reader's text color, light
   or dark.
-- Gmail (web and apps), Outlook on the web and the new Outlook for Windows: the
-  formula turns white on dark backgrounds.
+- Gmail (web and apps), and Outlook on the web, the new Outlook for Windows and
+  the Outlook apps for Mac and iPhone: the formula turns white on dark backgrounds.
 - Other mail apps: the image has a thin white outline, so it stays readable on
   dark backgrounds.
 

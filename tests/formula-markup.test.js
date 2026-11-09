@@ -104,20 +104,36 @@ test("formula markup needs both renders", () => {
   assert.equal(buildFormulaHtml({ fallback: null, white, isDisplayMath: false }), "");
 });
 
+const rules = (block) => block.split("\n").filter(Boolean);
+
 test("style blocks: one per mail client, in separate elements", () => {
-  const [gmail, thunderbird, editor, apple, outlook] = TBLATEX_STYLES;
-  assert.equal(TBLATEX_STYLES.length, 5);
-  assert.ok(gmail.split("\n").filter(Boolean).every((rule) => rule.startsWith("u + .tbx-body ")));
-  assert.ok(thunderbird.split("\n").filter(Boolean).every((rule) => rule.startsWith(".moz-text-html ")));
-  assert.ok(editor.split("\n").filter(Boolean).every((rule) => rule.startsWith("body:read-write ")));
+  const [gmail, thunderbird, editor, apple, outlookWeb, outlookMac, outlookCleanup] = TBLATEX_STYLES;
+  assert.equal(TBLATEX_STYLES.length, 7);
+  assert.ok(rules(gmail).every((rule) => rule.startsWith("u + .tbx-body ")));
+  assert.ok(rules(thunderbird).every((rule) => rule.startsWith(".moz-text-html ")));
+  assert.ok(rules(editor).every((rule) => rule.startsWith("body:read-write ")));
   assert.ok(apple.startsWith("@supports (-apple-color-filter: none) {"));
-  // Outlook renames the body's class to x_tbx-body, but not inside attribute selectors.
-  assert.ok(outlook.split("\n").filter(Boolean).every((rule) => rule.startsWith('[class~="x_tbx-body"] ')));
+  // Outlook on the web renames the body's class to x_tbx-body, but not inside attribute selectors.
+  assert.ok(rules(outlookWeb).every((rule) => rule.startsWith('[class~="x_tbx-body"] ')));
+  assert.ok(rules(outlookMac).every((rule) => rule.startsWith("#converted-body ")));
+  assert.ok(rules(outlookCleanup).every((rule) => /^\.tbx-body [^{]*\\0\{/.test(rule)));
 });
 
-test("Outlook gets Gmail's form behind its own gate", () => {
-  const [gmail, , , , outlook] = TBLATEX_STYLES;
-  assert.equal(outlook.replaceAll('[class~="x_tbx-body"]', "u + .tbx-body"), gmail);
+test("Outlook gets Gmail's form behind each of its gates", () => {
+  const [gmail, , , , outlookWeb, outlookMac, outlookCleanup] = TBLATEX_STYLES;
+  assert.equal(outlookWeb.replaceAll('[class~="x_tbx-body"]', "u + .tbx-body"), gmail);
+  assert.equal(outlookMac.replaceAll("#converted-body", "u + .tbx-body"), gmail);
+  assert.equal(outlookCleanup.replaceAll("\\0{", " {").replace(/^\.tbx-body /gm, "u + .tbx-body "), gmail);
+});
+
+test("Outlook's \\0 is a backslash and a zero, only in its own block", () => {
+  const outlookCleanup = TBLATEX_STYLES[6];
+  // A JavaScript "\0" would be a NUL character, which Outlook does not delete.
+  assert.ok(TBLATEX_STYLES.every((block) => !block.includes("\u0000")));
+  // Gmail drops a block that holds \0, so no other block may hold one, and
+  // every rule here needs one so that no other client matches it.
+  assert.ok(TBLATEX_STYLES.every((block) => block === outlookCleanup || !block.includes("\\0")));
+  assert.equal((outlookCleanup.match(/\\0\{/g) || []).length, rules(outlookCleanup).length);
 });
 
 test("Gmail's form blends the white image directly over the white box", () => {

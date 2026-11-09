@@ -1,3 +1,9 @@
+--v0.8.21
+
+- Formulas now follow the reader's light or dark theme in the Outlook apps for Mac and
+  iPhone too, with the same form as Gmail, using two Outlook-only tricks documented on
+  howtotarget.email. Classic Outlook keeps the white outline.
+
 --v0.8.20
 
 - Formulas now follow the reader's light or dark theme in Outlook on the web and the

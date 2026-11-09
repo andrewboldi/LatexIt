@@ -44,6 +44,20 @@ const TBLATEX_STYLES = [
     '[class~="x_tbx-body"] .tbx-w { display:inline-block !important; font-size:0; line-height:0; }\n' +
     '[class~="x_tbx-body"] .tbx-l1 { display:inline-block; font-size:0; line-height:0; mix-blend-mode:difference; }\n' +
     '[class~="x_tbx-body"] .tbx-l1 img { vertical-align:baseline !important; }\n',
+  // The Outlook apps for Mac and iPhone match neither gate above. Two
+  // Outlook-only tricks from howtotarget.email give them Gmail's form too.
+  // Outlook for Mac (and reportedly Android) wraps the message in #converted-body.
+  "#converted-body .tbx-b { display:none !important; }\n" +
+    "#converted-body .tbx-w { display:inline-block !important; font-size:0; line-height:0; }\n" +
+    "#converted-body .tbx-l1 { display:inline-block; font-size:0; line-height:0; mix-blend-mode:difference; }\n" +
+    "#converted-body .tbx-l1 img { vertical-align:baseline !important; }\n",
+  // Outlook deletes the \0 that ends each selector here (reportedly on the web,
+  // iPhone and Android); in any other client the \0 makes the selector match
+  // nothing. Gmail drops a block that holds it, hence a block of its own.
+  ".tbx-body .tbx-b\\0{ display:none !important; }\n" +
+    ".tbx-body .tbx-w\\0{ display:inline-block !important; font-size:0; line-height:0; }\n" +
+    ".tbx-body .tbx-l1\\0{ display:inline-block; font-size:0; line-height:0; mix-blend-mode:difference; }\n" +
+    ".tbx-body .tbx-l1 img\\0{ vertical-align:baseline !important; }\n",
 ];
 
 function normalizeColor(color) {
